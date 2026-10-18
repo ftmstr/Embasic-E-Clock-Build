@@ -72,13 +72,13 @@ class SnapshotTests(unittest.TestCase):
     def check(self, approval=None):
         audit = json.loads((self.root / v.AUDIT_FILE).read_text())
         if approval is None:
-            approval = audit["public_inventory_sha256"]
+            approval = v.approval_seal(self.root, audit["public_inventory_sha256"])
         return v.verify(self.root, expected_root=self.expected_root, approved=approval)
 
     def test_multi_commit_public_history_with_known_root_passes_synthetic_contract(self):
         got = self.check()
         self.assertGreaterEqual(got["sources"], 20)
-        self.assertEqual(got["approved_digest"], json.loads((self.root/v.AUDIT_FILE).read_text())["public_inventory_sha256"])
+        self.assertEqual(got["approved_digest"], v.approval_seal(self.root, json.loads((self.root/v.AUDIT_FILE).read_text())["public_inventory_sha256"]))
 
     def test_no_out_of_band_admin_digest_blocks_even_approved_json(self):
         with self.assertRaisesRegex(v.Blocked, "admin-managed"):
@@ -87,6 +87,15 @@ class SnapshotTests(unittest.TestCase):
     def test_wrong_out_of_band_digest_blocks(self):
         with self.assertRaisesRegex(v.Blocked, "admin-managed"):
             self.check(approval="f" * 64)
+
+    def test_approval_seal_binds_audit_claims_even_when_source_is_unchanged(self):
+        prior = self.check()["approved_digest"]
+        audit = json.loads((self.root / v.AUDIT_FILE).read_text())
+        audit["source_rights_approved"] = "NOT APPROVED"
+        self.write(v.AUDIT_FILE, json.dumps(audit) + "\n")
+        self.assertNotEqual(prior, v.approval_seal(self.root, audit["public_inventory_sha256"]))
+        with self.assertRaises(v.Blocked):
+            self.check(approval=prior)
 
     def test_no_private_human_and_license_review_blocks(self):
         self.make_audit(source_rights_approved="NOT REVIEWED")
