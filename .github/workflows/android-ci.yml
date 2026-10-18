@@ -1,0 +1,166 @@
+name: Embasic E-Clock Public Android and Wear CI
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eclock-public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-audit:
+    name: Security and licensing gate (NO-GO until approved)
+    if: github.event.repository.private == false && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout public sources with full history
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify public root, source manifest and private approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse --is-shallow-repository)" = false
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import subprocess
+          from pathlib import Path, PurePosixPath
+
+          trusted_root = "9ba88a5482e30ddb3834e79dede8240af13185c3"
+          roots = subprocess.check_output(
+              ["git", "rev-list", "--all", "--max-parents=0"], text=True
+          ).splitlines()
+          if roots != [trusted_root]:
+              raise SystemExit("BLOCKED: unexpected root/private commit history")
+          refs = subprocess.check_output(
+              ["git", "for-each-ref", "--format=%(refname)", "refs/remotes/origin"],
+              text=True
+          ).splitlines()
+          if set(refs) - {"refs/remotes/origin/HEAD", "refs/remotes/origin/main"}:
+              raise SystemExit("BLOCKED: unexpected public branch")
+          if subprocess.check_output(["git", "tag", "--list"], text=True).strip():
+              raise SystemExit("BLOCKED: unexpected public tags")
+
+          audit_file = Path("SNAPSHOT-AUDIT.json")
+          if not audit_file.exists():
+              raise SystemExit("NO-GO: source security review not yet completed")
+          audit = json.loads(audit_file.read_text(encoding="utf-8"))
+          requirements = {
+              "automated_secret_scan": "PASS",
+              "private_history_audit": "VERIFIED",
+              "source_rights_approved": "APPROVED",
+              "artifact_redistribution_approved": "APPROVED",
+              "public_approval": "APPROVED",
+          }
+          if any(audit.get(k) != v for k, v in requirements.items()):
+              raise SystemExit("NO-GO: secret/license/human approval incomplete")
+          raw = subprocess.check_output(["git", "ls-files", "-z"])
+          files = [s.decode() for s in raw.split(b"\0") if s]
+          mandatory = {
+              "settings.gradle.kts", "build.gradle.kts",
+              "gradle/libs.versions.toml", "app-phone/build.gradle.kts",
+              "app-wear/build.gradle.kts", "core/model/build.gradle.kts",
+              "core/alarm/build.gradle.kts", "core/data/build.gradle.kts",
+              "core/sync/build.gradle.kts"
+          }
+          if not mandatory.issubset(files):
+              raise SystemExit("NO-GO: Android and Wear sources missing")
+          forbidden = {"local.properties", "google-services.json",
+                       "secrets.properties", "credentials.json",
+                       ".env", "keystore.properties", ".gitmodules"}
+          extensions = {".jks", ".keystore", ".p12", ".pfx", ".pem",
+                        ".key", ".sqlite", ".db", ".log", ".apk",
+                        ".aab", ".zip", ".mp3", ".wav"}
+          for name in files:
+              p = PurePosixPath(name)
+              if p.name.lower() in forbidden or p.suffix.lower() in extensions or name.startswith(("private/", "Raporlar/", "Yedekleme/")):
+                  raise SystemExit("NO-GO: forbidden file in public snapshot")
+          modes = subprocess.check_output(["git", "ls-files", "-s"], text=True).splitlines()
+          if any(not mode.startswith(("100644 ", "100755 ")) for mode in modes):
+              raise SystemExit("NO-GO: symlink/gitlink in snapshot")
+          sources = [n for n in files if n not in ("README.md", "SNAPSHOT-AUDIT.json")]
+          sums = [hashlib.sha256(Path(n).read_bytes()).hexdigest() + "  " + n
+                  for n in sources]
+          digest = hashlib.sha256(
+              ("\n".join(sorted(sums)) + "\n").encode()
+          ).hexdigest()
+          if digest != audit.get("inventory_sha256") or len(files) != audit.get("files"):
+              raise SystemExit("NO-GO: public source differs from private reviewed manifest")
+          print("Audit assertions and file inventory: PASS")
+          PY
+
+  build:
+    name: ${{ matrix.target }} tests lint debug build
+    needs: source-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [core, phone, wear]
+    steps:
+      - name: Checkout reviewed public source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: JDK 17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 9.6.0 with upstream SHA256 verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/gradle.zip" https://services.gradle.org/distributions/gradle-9.6.0-bin.zip
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/gradle.sha256" https://services.gradle.org/distributions/gradle-9.6.0-bin.zip.sha256
+          printf '%s  %s\n' "$(tr -d '\r\n ' < "$RUNNER_TEMP/gradle.sha256")" "$RUNNER_TEMP/gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-9.6.0/bin" >> "$GITHUB_PATH"
+      - name: Android SDK 37 and build tools 36.0.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+          test -f "$ANDROID_HOME/platforms/android-37/android.jar"
+      - name: Core unit tests and lint
+        if: matrix.target == 'core'
+        run: |
+          gradle --no-daemon --console=plain :core:model:testDebugUnitTest :core:alarm:testDebugUnitTest :core:sync:testDebugUnitTest :core:data:testDebugUnitTest :core:data:lintDebug
+      - name: Phone unit tests lint and debug build
+        if: matrix.target == 'phone'
+        run: |
+          gradle --no-daemon --console=plain :app-phone:testDebugUnitTest :app-phone:lintDebug :app-phone:assembleDebug
+      - name: Wear unit tests lint and debug build
+        if: matrix.target == 'wear'
+        run: |
+          gradle --no-daemon --console=plain :app-wear:testDebugUnitTest :app-wear:lintDebug :app-wear:assembleDebug
+      - name: Record APK commit and SHA256
+        if: success() && matrix.target != 'core'
+        shell: bash
+        run: |
+          set -euo pipefail
+          module=app-${{ matrix.target }}
+          mkdir -p evidence
+          test "$(find "$module/build/outputs/apk/debug" -name '*.apk' -type f | wc -l)" -eq 1
+          sha256sum "$module"/build/outputs/apk/debug/*.apk > evidence/SHA256SUMS.txt
+          printf 'sha=%s\nmodule=%s\n' "$GITHUB_SHA" "$module" > evidence/build-info.txt
+      - name: Upload debug APK only after approved source and redistribution
+        if: success() && matrix.target != 'core'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: eclock-${{ matrix.target }}-debug
+          path: |
+            app-${{ matrix.target }}/build/outputs/apk/debug/*.apk
+            evidence/*
+          if-no-files-found: error
+          retention-days: 3
