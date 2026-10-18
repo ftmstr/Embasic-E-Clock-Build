@@ -17,7 +17,7 @@ This is a **public-only procedure**, not permission to export Private E-Clock co
 4. Independently verify Maven/Gradle direct and transitive dependencies, source and APK redistribution notices, font/logo/audio rights, and Play Services/Wear OS terms. No `LICENSE` or legal approval is to be fabricated. Repeat secret scan on **final effective Public candidate**.
 5. Before publication, record a Private audit with evidence IDs and precise source + asset digests in the Private Google Drive project folder. Do not place private report content, reviewer identities, email addresses or private scanner logs in Public.
 6. After authorized clean source files are committed to Public through **new Public commits only**, compute the following draft manifest from their exact tracked bytes. `source_files` is the lexically sorted list of tracked files excluding `INFRA_FILES` and `SNAPSHOT-AUDIT.json`; `source_inventory_sha256` is SHA256 of a trailing-newline-terminated sorted list of `<file SHA256>  <path>` for source files. `public_inventory_sha256` uses the same algorithm on *all tracked files except `SNAPSHOT-AUDIT.json`*, including public workflows, tests and README. The audit file itself is excluded to prevent self-referential hashing. Fill `reviewed_asset_sha256` with an exact path-to-SHA mapping; an empty mapping is valid only when there are zero assets.
-7. Treat `SNAPSHOT-AUDIT.json` claims as **assertions, not proof**. Set its fields to `PASS/VERIFIED/APPROVED` only after actual audit and authorized legal/human approval. The repository administrator must **separately** set the repository **Actions variable** `ECLOCK_APPROVED_PUBLIC_SHA256` equal to the exact reviewed `public_inventory_sha256` *after* independent inspection. This variable is intentionally unset today. Reset it whenever any public file changes, even a workflow edit.
+7. Treat `SNAPSHOT-AUDIT.json` claims as **assertions, not proof**. Set its fields to `PASS/VERIFIED/APPROVED` only after actual audit and authorized legal/human approval. The repository administrator must **separately** set the repository **Actions variable** `ECLOCK_APPROVED_PUBLIC_SHA256` equal to the **approval seal** calculated as SHA256 of `public_inventory_sha256 + newline + SHA256(SNAPSHOT-AUDIT.json exact bytes) + newline` *after* independent inspection. This also seals the claimed audit/rights statuses against later alteration. This variable is intentionally unset today. Reset it whenever any public file or the audit claims change, even a workflow edit.
 8. With repo branch protection, administrator review and repository-variable access restrictions enforced independently, GitHub Actions can then attempt the core/phone/wear debug build. A green build does not demonstrate device timing, paired signatures, STOP/SNOOZE transport, Doze, Direct Boot or DST reliability.
 
 ## Required manifest format — illustration ONLY, not an approved record
@@ -37,6 +37,21 @@ This is a **public-only procedure**, not permission to export Private E-Clock co
 ```
 
 Do **not** commit this illustrative JSON as an approval and do not set the Actions variable without independent evidence.
+
+## Administrator-controlled seal derivation (only after actual approval)
+
+From the exact audited Public working tree, compute the seal locally:
+
+```python
+import hashlib
+from pathlib import Path
+audit_hash = hashlib.sha256(Path("SNAPSHOT-AUDIT.json").read_bytes()).hexdigest()
+tree_hash = "<reviewed public_inventory_sha256 from audited file>"
+seal = hashlib.sha256((tree_hash + "\\n" + audit_hash + "\\n").encode()).hexdigest()
+print(seal)
+```
+
+The repository variable `ECLOCK_APPROVED_PUBLIC_SHA256` is the seal, **not** the raw tree digest. Do not set it based solely on repository claims. The approver must inspect the private evidence before setting it, and must enforce branch protection separately.
 
 ## Validation commands
 
