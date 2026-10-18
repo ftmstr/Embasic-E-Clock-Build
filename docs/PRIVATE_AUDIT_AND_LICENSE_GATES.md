@@ -56,3 +56,29 @@ Do not run an automatic public push. Once all approvals exist, stage only review
 ## E. Final state for this tour
 
 Public security synthetic CI can PASS while real private audit remains NOT RUN and Android CI intentionally stays NO-GO. This separation is intentional and must be preserved.
+
+
+## Tur 4: Public Git history scanner (actually run in Public CI)
+
+`tools/audit_public_git_history.py` traverses **all reachable Public commit trees**, not just the current index; checks historical filenames and file modes, scans old textual Git blobs and commit messages for selected high-confidence credential signatures, and rejects previously-added-and-deleted forbidden files and symlinks. The scan runs with checkout `fetch-depth: 0`, before the source/audit release gate. It is an extra conservative hygiene layer **not a complete Gitleaks, DLP/PII, or legal review**. It does not scan Private Git history and does not validate binary metadata / archive internals.
+
+## Tur 4: Draft transitive dependency queue — from PRIVATE local Gradle only
+
+A second, public-source-only script `tools/gradle_dependency_preflight.py` may be carried to a trusted environment. It has no network publication or Git push operations. It requires a clean, full, authorized Private clone on the dedicated preparation branch, a verified Gradle 9.6.0 executable and **pre-populated local dependency caches**, and runs the six modules' `debugRuntimeClasspath` dependency graph tasks with `--offline`. A failed resolution, missing Gradle, wrong remote or dirty checkout blocks execution. Its output is a **new private file outside the checkout**, chmod 0600, containing only *draft coordinates and NOT VERIFIED license statuses*:
+
+```bash
+python3 tools/gradle_dependency_preflight.py \
+  --private-checkout /trusted/private/E-Clock \
+  --gradle /trusted/gradle-9.6.0/bin/gradle \
+  --private-report /trusted/restricted/eclock-resolved-draft.json
+```
+
+The Kotlin Gradle version catalog in Private defines direct aliases for AndroidX Compose, Room, DataStore, Wear Compose, Play Services Wearable, Coroutines, JUnit, AndroidX Test, and compiler plugins. A version catalog is **not** the actual resolution graph. The queue script parses Gradle text output and therefore cannot guarantee all artifacts/variants, classifiers, BOM constraints, parent POM inheritance, distribution metadata, embedded native binaries or build-time plugin dependencies. It is explicitly a draft only; no actual Private Gradle invocation took place in Public CI.
+
+Before license approval, run online locked/resolved per-variant reports under controlled permissions, compare with the offline draft, collect corresponding Maven POM `<licenses>`, parent POMs, `.module` metadata, SPDX identifiers, notices and bundled Android assets. Confirm obligations for both phone and Wear APK and all transitive components. Google documents that its OSS licenses tooling can derive notices from POMs but this does **not** replace legal ownership decisions: https://developers.google.com/android/guides/opensource . Maven's POM license element is described at https://maven.apache.org/pom.html . Gradle resolution is variant-aware: https://docs.gradle.org/current/userguide/graph_resolution.html .
+
+The build's Android Gradle Plugin 9.4.0 compatibility baseline is Gradle 9.6.0, JDK 17, Build Tools 36.0.0, compileSdk 37 according to https://developer.android.com/build/releases/agp-9-4-0-release-notes . Actual private build NOT RUN.
+
+## Branch and approval management
+
+Public `main` branch-protection readback returned HTTP 403 `Resource not accessible by integration`. Do not infer that branch protection is enabled or disabled; the administrator must inspect Settings → Rules → Rulesets / Branch protection and ensure reviews, no force-push/deletion, required checks and limited bypasses. The administrator-managed Actions approval seal cannot be verified via the connected read-only endpoint, and remains **NOT VERIFIED/NOT APPROVED**. A repository variable by itself is not a substitute for genuine restricted administrative permissions or independent code review.
