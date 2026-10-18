@@ -12,8 +12,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  bootstrap-tests:
+    name: Synthetic public audit contract tests
+    if: github.event.repository.private == false && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout public-only test source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Run isolated synthetic-only security and history regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools -p 'test_*.py' -v
+
   source-audit:
     name: Security and licensing gate (NO-GO until approved)
+    needs: bootstrap-tests
     if: github.event.repository.private == false && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -23,79 +40,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify public root, source manifest and private approval
+      - name: Verify source, license and administrator-managed SHA-256 approval
+        env:
+          ECLOCK_APPROVED_PUBLIC_SHA256: ${{ vars.ECLOCK_APPROVED_PUBLIC_SHA256 }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse --is-shallow-repository)" = false
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import subprocess
-          from pathlib import Path, PurePosixPath
-
-          trusted_root = "9ba88a5482e30ddb3834e79dede8240af13185c3"
-          roots = subprocess.check_output(
-              ["git", "rev-list", "--all", "--max-parents=0"], text=True
-          ).splitlines()
-          if roots != [trusted_root]:
-              raise SystemExit("BLOCKED: unexpected root/private commit history")
-          refs = subprocess.check_output(
-              ["git", "for-each-ref", "--format=%(refname)", "refs/remotes/origin"],
-              text=True
-          ).splitlines()
-          if set(refs) - {"refs/remotes/origin/HEAD", "refs/remotes/origin/main"}:
-              raise SystemExit("BLOCKED: unexpected public branch")
-          if subprocess.check_output(["git", "tag", "--list"], text=True).strip():
-              raise SystemExit("BLOCKED: unexpected public tags")
-
-          audit_file = Path("SNAPSHOT-AUDIT.json")
-          if not audit_file.exists():
-              raise SystemExit("NO-GO: source security review not yet completed")
-          audit = json.loads(audit_file.read_text(encoding="utf-8"))
-          requirements = {
-              "automated_secret_scan": "PASS",
-              "private_history_audit": "VERIFIED",
-              "source_rights_approved": "APPROVED",
-              "artifact_redistribution_approved": "APPROVED",
-              "public_approval": "APPROVED",
-          }
-          if any(audit.get(k) != v for k, v in requirements.items()):
-              raise SystemExit("NO-GO: secret/license/human approval incomplete")
-          raw = subprocess.check_output(["git", "ls-files", "-z"])
-          files = [s.decode() for s in raw.split(b"\0") if s]
-          mandatory = {
-              "settings.gradle.kts", "build.gradle.kts",
-              "gradle/libs.versions.toml", "app-phone/build.gradle.kts",
-              "app-wear/build.gradle.kts", "core/model/build.gradle.kts",
-              "core/alarm/build.gradle.kts", "core/data/build.gradle.kts",
-              "core/sync/build.gradle.kts"
-          }
-          if not mandatory.issubset(files):
-              raise SystemExit("NO-GO: Android and Wear sources missing")
-          forbidden = {"local.properties", "google-services.json",
-                       "secrets.properties", "credentials.json",
-                       ".env", "keystore.properties", ".gitmodules"}
-          extensions = {".jks", ".keystore", ".p12", ".pfx", ".pem",
-                        ".key", ".sqlite", ".db", ".log", ".apk",
-                        ".aab", ".zip", ".mp3", ".wav"}
-          for name in files:
-              p = PurePosixPath(name)
-              if p.name.lower() in forbidden or p.suffix.lower() in extensions or name.startswith(("private/", "Raporlar/", "Yedekleme/")):
-                  raise SystemExit("NO-GO: forbidden file in public snapshot")
-          modes = subprocess.check_output(["git", "ls-files", "-s"], text=True).splitlines()
-          if any(not mode.startswith(("100644 ", "100755 ")) for mode in modes):
-              raise SystemExit("NO-GO: symlink/gitlink in snapshot")
-          sources = [n for n in files if n not in ("README.md", "SNAPSHOT-AUDIT.json")]
-          sums = [hashlib.sha256(Path(n).read_bytes()).hexdigest() + "  " + n
-                  for n in sources]
-          digest = hashlib.sha256(
-              ("\n".join(sorted(sums)) + "\n").encode()
-          ).hexdigest()
-          if digest != audit.get("inventory_sha256") or len(files) != audit.get("files"):
-              raise SystemExit("NO-GO: public source differs from private reviewed manifest")
-          print("Audit assertions and file inventory: PASS")
-          PY
+          python3 tools/verify_snapshot.py
 
   build:
     name: ${{ matrix.target }} tests lint debug build
