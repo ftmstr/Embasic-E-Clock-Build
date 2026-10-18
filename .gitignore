@@ -1,0 +1,36 @@
+# Android and Gradle
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+.externalNativeBuild/
+.cxx/
+captures/
+
+# Signing keys, credentials, archives and device data
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+secrets.properties
+credentials.json
+google-services.json
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.apk
+*.aab
+*.zip
+
+# Private engineering reports and backups
+private/
+Raporlar/
+Yedekleme/
