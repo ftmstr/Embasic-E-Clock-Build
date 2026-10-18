@@ -47,7 +47,7 @@ import hashlib
 from pathlib import Path
 audit_hash = hashlib.sha256(Path("SNAPSHOT-AUDIT.json").read_bytes()).hexdigest()
 tree_hash = "<reviewed public_inventory_sha256 from audited file>"
-seal = hashlib.sha256((tree_hash + "\\n" + audit_hash + "\\n").encode()).hexdigest()
+seal = hashlib.sha256((tree_hash + "\n" + audit_hash + "\n").encode()).hexdigest()
 print(seal)
 ```
 
