@@ -45,6 +45,12 @@ def digest(root: Path, paths: list[str]) -> str:
     return hashlib.sha256(("\n".join(sorted(rows)) + "\n").encode()).hexdigest()
 
 
+def approval_seal(root: Path, public_digest: str) -> str:
+    """Admin approves BOTH immutable tracked bytes and audit JSON assertions."""
+    audit_hash = hashlib.sha256((root / AUDIT_FILE).read_bytes()).hexdigest()
+    return hashlib.sha256((public_digest + "\n" + audit_hash + "\n").encode()).hexdigest()
+
+
 def source_path(path: str) -> bool:
     if path in SOURCE_FILES:
         return True
@@ -123,7 +129,7 @@ def verify(root: Path, expected_root: str = PUBLIC_ROOT, approved: str = "") -> 
     tree_digest = digest(root, public_paths)
     if audit.get("public_inventory_sha256") != tree_digest:
         raise Blocked("Public infrastructure/source inventory differs from reviewed content")
-    if not re.fullmatch(r"[a-f0-9]{64}", approved) or approved != tree_digest:
+    if not re.fullmatch(r"[a-f0-9]{64}", approved) or approved != approval_seal(root, tree_digest):
         raise Blocked("Independent admin-managed SHA-256 approval missing or mismatched")
     assets = {p for p in sources if PurePosixPath(p).suffix.lower() in ASSET_SUFFIXES}
     asset_hashes = audit.get("reviewed_asset_sha256")
@@ -131,7 +137,7 @@ def verify(root: Path, expected_root: str = PUBLIC_ROOT, approved: str = "") -> 
         raise Blocked("Binary/vector asset review missing")
     if any(asset_hashes[p] != hashlib.sha256((root / p).read_bytes()).hexdigest() for p in assets):
         raise Blocked("Asset hash changed since rights review")
-    return {"sources": len(sources), "tracked": len(tracked), "approved_digest": tree_digest}
+    return {"sources": len(sources), "tracked": len(tracked), "approved_digest": approval_seal(root, tree_digest)}
 
 
 def main() -> None:
