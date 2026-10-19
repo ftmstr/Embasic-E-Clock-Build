@@ -46,6 +46,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Require protected Public main before considering source approval
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/check_branch_protection.py
       - name: Verify source, license and administrator-managed SHA-256 approval
         env:
           ECLOCK_APPROVED_PUBLIC_SHA256: ${{ vars.ECLOCK_APPROVED_PUBLIC_SHA256 }}
