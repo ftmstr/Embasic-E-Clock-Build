@@ -82,3 +82,37 @@ The build's Android Gradle Plugin 9.4.0 compatibility baseline is Gradle 9.6.0, 
 ## Branch and approval management
 
 Public `main` branch-protection readback returned HTTP 403 `Resource not accessible by integration`. Do not infer that branch protection is enabled or disabled; the administrator must inspect Settings → Rules → Rulesets / Branch protection and ensure reviews, no force-push/deletion, required checks and limited bypasses. The administrator-managed Actions approval seal cannot be verified via the connected read-only endpoint, and remains **NOT VERIFIED/NOT APPROVED**. A repository variable by itself is not a substitute for genuine restricted administrative permissions or independent code review.
+
+
+## Tur 5: Actual GitHub branch policy failure and PR-safe CI
+
+On 19 October 2026, a **read-only GitHub API** query to `GET /repos/ftmstr/Embasic-E-Clock-Build/branches/main` returned `protected: false`; the repository rulesets list returned empty. This is a **confirmed NO-GO**, not merely an authorization error to the detailed protection endpoint. The detailed `branches/main/protection` endpoint remains unavailable (403).
+
+The public `tools/check_branch_protection.py` now performs a fresh read-only GitHub branch readback on the protected `main` expectation and blocks source approval when it is unprotected, unavailable, malformed or for the wrong repository. This is executed before the source manifest check. A `protected: true` response is **necessary, not sufficient**: only an administrator can additionally verify exact required checks, PR reviews, force-push/deletion bans and bypass permissions.
+
+Administrator action in GitHub: **Embasic-E-Clock-Build → Settings → Branches → Add branch protection rule** (or **Settings → Rules → Rulesets**), target `main`, require PR reviews and the **Synthetic public audit contract tests** check, disallow force pushes and deletions, and limit bypasses. Never select the overall deliberately red Android workflow as a permanent required check while the source audit is intentionally NO-GO. After source rights review and branch-rule verification, revisit which status checks are mandatory. GitHub Free supports branch protections for public repositories.
+
+To avoid deadlocking reviews, `.github/workflows/android-ci.yml` now also triggers on `pull_request` targeting `main`, with read-only token permissions and **synthetic checks only**; source audit and phone/Wear build remain restricted to `main`. No source merge or PR was performed to test a real PR event. Static synthetic workflow-contract tests verify this design; **actual PR-event execution NOT RUN**.
+
+GitHub official: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches .
+
+## Tur 5: Restricted Private HEAD content spot check — NOT Gitleaks
+
+A read-only GitHub connector accessed only **12 selected Private HEAD text files**: root Gradle files and version catalog, two application manifests, three GitHub workflow YAMLs and three Private snapshot/test scripts. Simple high-confidence credential-prefix and assignment patterns returned no matches in this selection; no raw content, credentials or identifying values were exported. This is **not** a complete source file scan, does not enumerate all 309 HEAD blobs or historical commits, and **does not count as Gitleaks PASS**. There is no authorized full Private Git clone or Gitleaks executable in the accessible execution environment; real Private full-history Gitleaks remains NOT RUN.
+
+## Tur 5: Offline POM declaration evidence — license verdict is NOT VERIFIED
+
+`tools/pom_license_preflight.py` consumes the output of the **Private-only** Gradle dependency draft and local Maven POM files laid out as `group/path/artifact/version/artifact-version.pom`. It records SHA-256 of actual POM bytes, declared license name/URL, parent POM coordinates and missing metadata, all in a **new, restricted Private output file**. It rejects unsafe DTD/entity XML, missing/invalid input, malformed coordinates and unapproved drafts. Maven POM license tags represent **publisher declarations only**, not legal permission. Inherited parent licenses, SPDX normalization, actual delivered APK notices and transitive redistribution conditions remain NOT VERIFIED. It never uploads source, Maven metadata, assets or reports to Public.
+
+Example in the trusted PRIVATE processing environment (never in this Public repository):
+
+```bash
+python3 tools/pom_license_preflight.py \
+  --private-draft /restricted/eclock-deps-draft.json \
+  --pom-root /restricted/maven-pom-cache \
+  --private-report /restricted/eclock-pom-evidence.json
+```
+
+The direct version catalog readback is **not a resolved Gradle dependency tree**. Maven POM endpoint retrieval in the current execution environment did not succeed, and no actual Private Gradle resolution was performed. Published third-party indexing indicates one Room 2.8.5 artifact declares Apache-2.0, but this observation does **not** establish all dependency licenses or obligations. License compliance remains blocked until complete runtime/build-time resolved graph, POM parent inheritance, notices and legal source provenance are reviewed.
+
+For dependency checksum provenance see https://docs.gradle.org/current/userguide/dependency_verification.html — auto-generated checksums need human verification and cannot substitute for a license review.
