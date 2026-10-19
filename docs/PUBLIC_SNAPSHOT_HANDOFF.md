@@ -68,3 +68,18 @@ The second command must exit nonzero while source audit evidence is missing.
 - Branch history rooting and admin-managed variable approval require actual GitHub branch protection, secret hygiene and independent human review; in-repository checks alone cannot replace repository permissions.
 - CI emits no APK artifacts before the source-audit job succeeds.
 - Separate GitHub-hosted debug builds may be signed with different ephemeral debug certificates. They are **not** a validated phone/watch Data Layer pair. Paired device tests must use matching developer-controlled **non-production** test signing in a trusted environment.
+
+
+## Tur 5: Mandatory live GitHub branch-policy gate
+
+On 19 October 2026, GitHub REST `GET /repos/ftmstr/Embasic-E-Clock-Build/branches/main` returned **`protected: false`**. The active rulesets list was empty. Detailed branch-protection settings returned 403 to the connected integration. The source-release gate now calls `tools/check_branch_protection.py` before the snapshot verifier and rejects `protected != true` or API errors. **This repo is NO-GO for source publication until the administrator protects `main` and separately verifies the exact enforcement policy.**
+
+Set the rule in GitHub Settings → Branches or Rules → Rulesets. Require a pull request with review, disallow deletion/force-push and constrain bypass actors. The read-only **Synthetic public audit contract tests** job is designed to run on PRs. The source-audit/Android jobs do not run on PRs; they remain reserved for reviewed code on `main`. A genuine PR CI run has **NOT RUN** yet. Do not require the intentionally failing source-audit job as an immediate merge prerequisite before an approved snapshot exists. Revisit required checks once release approval is possible.
+
+The temporary presence of an ordinary feature branch may be rejected by the strict single-public-branch source-audit check; clean up completed review branches before any release. Never delete or rewrite the trusted Public root to resolve this.
+
+## Restricted POM evidence queue
+
+Use `tools/gradle_dependency_preflight.py` only in a complete Private checkout to obtain a **draft resolved graph**. Separately, `tools/pom_license_preflight.py` accepts this Private JSON and **locally curated offline Maven POMs** to collect exact POM hashes and raw publisher license declarations. It neither downloads Private source nor approves licences. Missing/parent-inherited POM rights, SPDX alignment, third-party media, NOTICE requirements and phone/Wear redistributable bundles require explicit offline review; no actual resolved Private dependency graph has yet been produced.
+
+Before publication, review complete private Gitleaks + PII + source-rights evidence; run secret scans on the actual sanitized candidate and complete independent admin source/Audit seal. These actions remain **NOT RUN / NO-GO**, respectively.
