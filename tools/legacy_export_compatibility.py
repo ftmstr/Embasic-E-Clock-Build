@@ -46,6 +46,9 @@ def assess(audit: object, paths: list[str]) -> dict[str, object]:
         reasons.add("LEGACY_COUNT_MISMATCH")
     if LEGACY_WORKFLOW in paths:
         reasons.add("UNSAFE_LEGACY_WORKFLOW")
+        # Legacy exporter ROOT_FILES requires .yml, but its ALLOWED_SUFFIXES
+        # omits .yml, so check_name() rejects its own mandatory workflow.
+        reasons.add("LEGACY_REQUIRED_YAML_REJECTED_BY_EXPORTER")
     if any(p.startswith((".git/", ".github/workflows/")) and p != LEGACY_WORKFLOW
            for p in paths):
         reasons.add("UNEXPECTED_GIT_OR_WORKFLOW")
