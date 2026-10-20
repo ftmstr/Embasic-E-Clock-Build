@@ -47,12 +47,12 @@ class PomTests(unittest.TestCase):
         self.assertEqual(r["records"][0]["license_compliance"],"NOT VERIFIED")
 
     def test_pom_without_license_requires_manual_followup(self):
-        self.path.write_bytes(b"<project><modelVersion>4.0.0</modelVersion></project>")
+        self.path.write_bytes(b"<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId><artifactId>synthetic</artifactId><version>1.0</version></project>")
         r=p.collect(self.draft,self.root)
         self.assertEqual(r["no_direct_licenses"],1)
 
     def test_inherited_parent_is_visible_but_not_resolved_automatically(self):
-        raw=b"<project><parent><groupId>org.example</groupId><artifactId>base</artifactId><version>1.0</version></parent></project>"
+        raw=b"<project><parent><groupId>org.example</groupId><artifactId>base</artifactId><version>1.0</version></parent><artifactId>synthetic</artifactId></project>"
         self.path.write_bytes(raw)
         r=p.collect(self.draft,self.root)
         self.assertEqual(r["records"][0]["parent_pom"],"org.example:base:1.0")
@@ -80,6 +80,26 @@ class PomTests(unittest.TestCase):
         copy=dict(self.draft,all_coordinates=["org.example:synthetic:1.0"]*2)
         with self.assertRaisesRegex(p.Blocked,"Duplicate"):
             p.collect(copy,self.root)
+
+    def test_pom_with_wrong_artifact_id_cannot_supply_license_evidence(self):
+        self.path.write_bytes(POM.replace(b"<artifactId>synthetic</artifactId>",
+                                          b"<artifactId>unrelated</artifactId>"))
+        with self.assertRaisesRegex(p.Blocked, "identity"):
+            p.collect(self.draft, self.root)
+
+    def test_pom_with_wrong_version_cannot_supply_license_evidence(self):
+        self.path.write_bytes(POM.replace(b"<version>1.0</version>",
+                                          b"<version>2.0</version>"))
+        with self.assertRaisesRegex(p.Blocked, "identity"):
+            p.collect(self.draft, self.root)
+
+    def test_symlinked_pom_cannot_supply_license_evidence(self):
+        target=self.root / "synthetic-elsewhere.pom"
+        target.write_bytes(POM)
+        self.path.unlink()
+        self.path.symlink_to(target)
+        with self.assertRaisesRegex(p.Blocked, "Symlink"):
+            p.collect(self.draft, self.root)
 
     def test_metadata_xml_must_be_project(self):
         self.path.write_bytes(b"<settings/>")
