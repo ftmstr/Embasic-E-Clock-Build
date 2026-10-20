@@ -3,7 +3,10 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import stat
+import sys
 import tempfile
+from unittest.mock import patch
 import unittest
 
 spec = importlib.util.spec_from_file_location("dep_preflight", Path(__file__).with_name("gradle_dependency_preflight.py"))
@@ -47,17 +50,37 @@ class DependencyTests(unittest.TestCase):
     def test_extracts_transitive_and_selected_version_without_license_claims(self):
         calls = []
         report = d.collect(self.root, "fake-gradle", self.runner(calls))
-        self.assertEqual(len(calls), 6)
-        self.assertEqual(report["requested_configurations"], 6)
+        self.assertEqual(len(calls), 12)
+        self.assertEqual(report["requested_configurations"], 12)
         self.assertIn("org.jetbrains.kotlin:kotlin-stdlib:2.2.10", report["all_coordinates"])
         self.assertNotIn("org.jetbrains.kotlin:kotlin-stdlib:2.2.0", report["all_coordinates"])
         self.assertEqual(report["transitive_license_compliance"], "NOT VERIFIED")
         self.assertFalse(report["public_export_authorized"])
         self.assertTrue(all("--offline" in c for c in calls))
+        self.assertEqual(sum(c[-1] == "debugCompileClasspath" for c in calls), 6)
+        self.assertEqual(sum(c[-1] == "debugRuntimeClasspath" for c in calls), 6)
+        self.assertEqual(report["plugin_classpath_and_ksp"], "NOT RUN")
+        self.assertIn("INCOMPLETE", report["coverage_status"])
 
     def test_rejects_unresolved_report_even_exit_success(self):
         with self.assertRaisesRegex(d.Blocked, "Unresolved"):
             d.collect(self.root, "fake", self.runner([], payload="+--- fake:missing:1 FAILED"))
+
+    def test_rejects_offline_cache_resolution_warning(self):
+        with self.assertRaisesRegex(d.Blocked, "Unresolved"):
+            d.collect(self.root, "fake", self.runner([], payload="Could not find org.synthetic:component:1.2"))
+
+    def test_private_report_is_created_restricted_without_public_export(self):
+        with tempfile.TemporaryDirectory() as outdir:
+            output = Path(outdir) / "private-draft.json"
+            snapshot = d.collect(self.root, "fake", self.runner([]))
+            with patch.object(d, "collect", return_value=snapshot):
+                with patch.object(sys, "argv", ["preflight",
+                    "--private-checkout", str(self.root), "--private-report", str(output)]):
+                    d.main()
+            self.assertTrue(output.is_file())
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+            self.assertFalse(__import__("json").loads(output.read_text())["public_export_authorized"])
 
     def test_rejects_failed_gradle_executable(self):
         with self.assertRaisesRegex(d.Blocked, "not successful"):
