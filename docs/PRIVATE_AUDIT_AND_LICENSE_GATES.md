@@ -131,3 +131,32 @@ For dependency checksum provenance see https://docs.gradle.org/current/userguide
 - Official release corroboration: Android's Room 2.8.5 release notes show 9 September 2026; Google Play Services setup lists `play-services-wearable:20.0.1`. Secondary artifact indexing advertises Apache-2.0 for individual Room runtime components, but **does not prove complete resolved direct/transitive license compliance** or provide source ownership and redistribution approval.
 
 No change in approval policy: **Private repositories stay private; no source snapshot, test signing material, logo/audio, PII, APK or private Git history may be published until real scans and independent rights sign-off.**
+
+
+## Tur 7 — 20 October 2026: POM identity and reviewed notices (synthetic scope)
+
+Public readback remained the source-free root `0c15f08088b0f2ed0f836794e8e3edaefe286a52` on arrival. Actions #39348669288 proved 63/63 synthetic tests and a PASS on 44 Public Git revisions, while source approval stayed NO-GO with branch `protected:false`. Issue #2 remains open, no effective rulesets. Private `ftmstr/E-Clock` is still PRIVATE.
+
+**New real security logic:** `tools/pom_license_preflight.py` now checks a POM's effective `groupId:artifactId:version` (allowing group/version inheritance from a declared Maven parent) against the resolved component being evaluated; a mismatched, incomplete or unresolved identity fails closed. Previously an incorrectly located or substituted POM could contribute irrelevant license metadata. Symlinked POMs are rejected before a missing-file fallback. Synthetic regression tests include conflicting artifact and version, and linked POM metadata. These changes are **not** a real resolved Gradle/POM license scan; parent license inheritance, POM authentication, SPDX normalization and legal redistribution still require human review.
+
+**Rights and notice contract:** `tools/verify_snapshot.py` now optionally accepts `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` as reviewed, hash-sealed source-side files. They are not required where rights have not been established, are not created in this tour, and do **not** create any license grant. The independent administrator-approved inventory must cover their exact bytes before any build is allowed. Never synthesize third-party attribution or claim a missing LICENSE establishes permission to redistribute.
+
+Maven POM official reference: https://maven.apache.org/pom.html — `groupId`, `version`, and `licenses` can be inherited from a parent POM; a license declaration does not on its own prove redistribution rights.
+
+**True private scans still NOT RUN:** complete Private Gitleaks on all reachable refs and working files, entire 309-blob HEAD PII inspection, historic issues/PR/Actions/logs, online resolved Gradle graph, actual POM ancestry/NOTICE review. No Android core/phone/wear build, APK or physical paired-device verification. Source export is NO-GO and no Private source bytes/history or proprietary assets were written to this Public repository.
+
+### Tur 7 weighted audit readiness snapshot (indicative, not product-completion %)
+
+| Gate | Weight | Confirmed readiness | Weighted points |
+|---|---:|---:|---:|
+| Isolated Public bootstrap/root/historical guard | 15 | 100% | 15 |
+| Public synthetic tests and safe CI routing | 10 | 100% | 10 |
+| Actual complete Private Gitleaks and PII | 20 | 0% | 0 |
+| Effective admin branch protections | 10 | 0% | 0 |
+| Actual resolved dependency and license evidence | 15 | 0% | 0 |
+| Review-only snapshot handoff tooling | 15 | 30% (heuristic) | 4.5 |
+| Real Android builds and device testing | 10 | 0% | 0 |
+| Evidence chain and private Drive reporting | 5 | 100% | 5 |
+| **TOTAL** | **100** | **34.5% estimated** | **34.5** |
+
+This weighted score is a transparent **process-readiness estimate**, not a measured fraction of shipped phone/Wear functionality. The 30% handoff line means the compatibility and manifest tools exist, not that publication has occurred. A green synthetic test count does not increase the unrun Gitleaks/build/license gates.
