@@ -140,6 +140,16 @@ def verify(root: Path, expected_root: str = PUBLIC_ROOT, approved: str = "") -> 
         raise Blocked("Binary/vector asset review missing")
     if any(asset_hashes[p] != hashlib.sha256((root / p).read_bytes()).hexdigest() for p in assets):
         raise Blocked("Asset hash changed since rights review")
+    # A valid tracked manifest cannot guarantee that Gradle will ignore local,
+    # untracked or ignored inputs. Require a completely clean working copy
+    # before any trusted source build. Never echo sensitive filenames.
+    try:
+        if git(root, "status", "--porcelain", "--untracked-files=all", "--ignored=matching").strip():
+            raise Blocked("Public checkout includes modified, untracked or ignored files")
+        if git(root, "diff", "--quiet", "HEAD", "--").strip():
+            raise Blocked("Public checkout differs from reviewed HEAD")
+    except subprocess.CalledProcessError as exc:
+        raise Blocked("Public checkout cannot be proven clean") from exc
     return {"sources": len(sources), "tracked": len(tracked), "approved_digest": approval_seal(root, tree_digest)}
 
 
