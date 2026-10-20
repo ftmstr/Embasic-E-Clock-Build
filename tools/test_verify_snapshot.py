@@ -143,6 +143,16 @@ class SnapshotTests(unittest.TestCase):
         self.assertGreater(int(self.git("rev-list", "--all", "--count")), 1)
         self.assertEqual(len(self.git("rev-list", "--all", "--max-parents=0").splitlines()), 1)
 
+    def test_optional_legal_notices_are_reviewable_but_not_fabricated(self):
+        # A licensed export may need redistribution notices, but the gate
+        # must not claim that an absent or guessed LICENSE was approved.
+        for path in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            self.assertTrue(v.safe_path(path))
+            self.assertNotIn(path, v.REQUIRED)
+        for path in ("docs/PRIVATE_LICENSE.md", "app-phone/src/main/LICENSE.jar",
+                     "docs/LICENSE", "NOTICE.sig"):
+            self.assertFalse(v.safe_path(path))
+
     def test_source_paths_deny_unexpected_dirs(self):
         self.assertFalse(v.safe_path("docs/private_notes.md"))
         self.assertFalse(v.safe_path("app-phone/src/../../outside.kt"))
