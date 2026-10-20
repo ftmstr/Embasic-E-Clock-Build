@@ -190,3 +190,20 @@ The weighted Public build/security process-readiness rubric remains **34.5%**: b
 4. Review isolated snapshot with exact hashes and independent approval seal. No Private ancestry/source, signing keys, proprietary assets or special reports in Public until documented approval.
 
 Current result: **source transfer NO-GO, real Android phone/Wear build NOT RUN, no APK**.
+
+
+## Tur 9 — 20 October 2026: Safer Private Gradle draft and clean Public build gate
+
+**Baseline verified:** Public `7d712459fbe7c74624b44837cf50cb265a46207f`, Actions #39350736326; `67/67` synthetic PASS, Public history `51` commits and `51` unique blobs PASS. Private `ftmstr/E-Clock` remained private, Issue #2 remained OPEN, and GitHub branches/main readback returned `protected:false` with no active rulesets. Android build jobs were SKIPPED; artifacts zero.
+
+The **Private-only** `tools/gradle_dependency_preflight.py` now requests **12** configuration reports rather than 6: both `debugRuntimeClasspath` and `debugCompileClasspath` for each of `:app-phone`, `:app-wear`, `:core:model`, `:core:alarm`, `:core:data` and `:core:sync`. It fails closed on additional offline resolution errors and writes the new PRIVATE draft JSON through exclusive file creation (`O_CREAT|O_EXCL` and where available `O_NOFOLLOW`) with restrictive mode `0600` *from creation*, not with a permissive temporary write then `chmod`.
+
+Even 12 configurations **do not** fully cover Android build plugins, KSP code generators, annotation processors, test-only dependencies, all release/flavor variants, Maven BOM constraints, resolved APK artifacts, transitive POM parents or third-party NOTICE obligations. New draft report fields explicitly say `plugin_classpath_and_ksp=NOT RUN`, `resolved_artifact_files_and_checksums=NOT VERIFIED`, `transitive_license_compliance=NOT VERIFIED`, `public_export_authorized=false`. Official Gradle explains the `dependencies` and `dependencyInsight` tasks and selected/transitive graphs at https://docs.gradle.org/current/userguide/viewing_debugging_dependencies.html . Actual Private Gradle was NOT RUN.
+
+**Public gate hardening:** `tools/verify_snapshot.py` now refuses a reviewed Git tree that also has **modified, staged, untracked or ignored files** in the build checkout; it checks after the reviewed SHA and audit assertions. This blocks an untracked local file from influencing Gradle behavior even when the source manifest appears valid. CI must use a clean source checkout. Two new synthetic regressions exercise untracked and ignored files, in addition to the existing byte hash, approval seal and path/mode tests. It neither sets the independent approval seal nor relaxes the NO-GO for missing Private scans.
+
+**Private root/history:** The earlier read-only `git fsck --full --no-reflogs --unreachable` guard in `tools/private_audit_preflight.py` still exists and requires a trusted clean, full Private local clone. Neither that command nor the actual Gitleaks git/dir secret scanners were executed against Private in this turn; no source copy or Gitleaks PASS is claimed.
+
+**Current security boundary:** No Private source may be uploaded to Public until administrator activates the main branch ruleset (Issue #2), real full-history and worktree secret/PII scans are complete, runtime/compile/build classpaths and POM/legal distribution rights are reviewed, independent source manifest SHA/rights approval is recorded and real Android builds are possible. The Public CI source-audit remains intentionally NO-GO; Android builds NOT RUN.
+
+**Weighted readiness:** 15 points isolated Public root/history +10 points synthetic CI +0 Private full Gitleaks/PII +0 branch protection +0 actual resolved license +4.5/15 qualitative snapshot-handoff tooling +0 Android build/real device +5 verified private evidence = **34.5/100, indicative process preparation only**. This is not a phone/Wear functional completion metric and does not increase solely from additional synthetic tests.
