@@ -32,6 +32,7 @@ class LegacyContractTests(unittest.TestCase):
         self.assertFalse(got["publication_authorized"])
         self.assertEqual(got["source_bytes_examined"],0)
         self.assertIn("UNSAFE_LEGACY_WORKFLOW",got["reason_codes"])
+        self.assertIn("LEGACY_REQUIRED_YAML_REJECTED_BY_EXPORTER",got["reason_codes"])
         self.assertIn("PUBLIC_SOURCE_MANIFEST_ABSENT",got["reason_codes"])
 
     def test_forged_all_approved_legacy_export_still_blocked(self):
