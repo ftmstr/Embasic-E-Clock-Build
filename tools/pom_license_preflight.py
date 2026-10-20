@@ -20,7 +20,7 @@ class Blocked(Exception):
     pass
 
 
-def parse_pom(raw: bytes) -> dict:
+def parse_pom(raw: bytes, expected: str | None = None) -> dict:
     if len(raw) > 1024 * 1024:
         raise Blocked("Oversized POM")
     if re.search(br"<!\s*(?:DOCTYPE|ENTITY)\b", raw, flags=re.I):
@@ -54,6 +54,17 @@ def parse_pom(raw: bytes) -> dict:
         if not all((g, a, v)) or not COORD.fullmatch(":".join((g,a,v))):
             raise Blocked("Unresolved Maven parent POM coordinate")
         parent_gav = ":".join((g,a,v))
+    if expected is not None:
+        # Missing group/version may legitimately inherit from a POM parent.
+        # Unresolved property placeholders or mismatched coordinates must NOT
+        # lend another component's copyright/license metadata to this GAV.
+        gav = ":".join((
+            value(root, "groupId") or value(parent, "groupId"),
+            value(root, "artifactId"),
+            value(root, "version") or value(parent, "version"),
+        ))
+        if not COORD.fullmatch(gav) or gav != expected:
+            raise Blocked("Maven POM identity differs from expected resolved component")
     return {"licenses": licenses, "parent": parent_gav}
 
 
@@ -78,6 +89,8 @@ def collect(draft: dict, pom_root: Path) -> dict:
     rows = []
     for gav in sorted(coordinates):
         filename = pom_path(pom_root, gav)
+        if filename.is_symlink():
+            raise Blocked("Symlink or escaping Maven metadata")
         if not filename.is_file():
             rows.append({"coordinate": gav, "status": "POM NOT FOUND",
                          "license_compliance": "NOT VERIFIED"})
@@ -85,7 +98,7 @@ def collect(draft: dict, pom_root: Path) -> dict:
         if filename.is_symlink() or not filename.resolve().is_relative_to(pom_root.resolve()):
             raise Blocked("Symlink or escaping Maven metadata")
         raw = filename.read_bytes()
-        meta = parse_pom(raw)
+        meta = parse_pom(raw, expected=gav)
         rows.append({"coordinate": gav, "status": "POM REVIEW NEEDED",
                      "pom_sha256": hashlib.sha256(raw).hexdigest(),
                      "declared_licenses": meta["licenses"],
