@@ -143,6 +143,19 @@ class SnapshotTests(unittest.TestCase):
         self.assertGreater(int(self.git("rev-list", "--all", "--count")), 1)
         self.assertEqual(len(self.git("rev-list", "--all", "--max-parents=0").splitlines()), 1)
 
+    def test_untracked_public_file_blocks_even_when_manifest_is_approved(self):
+        self.write("unexpected.txt", "synthetic-only local input")
+        with self.assertRaisesRegex(v.Blocked, "modified, untracked or ignored"):
+            self.check()
+
+    def test_ignored_public_file_blocks_even_when_manifest_is_approved(self):
+        exclude = self.root / ".git/info/exclude"
+        with exclude.open("a", encoding="utf-8") as stream:
+            stream.write("\n*.synthetic-ignored\n")
+        self.write("local.synthetic-ignored", "synthetic-only ignored input")
+        with self.assertRaisesRegex(v.Blocked, "modified, untracked or ignored"):
+            self.check()
+
     def test_optional_legal_notices_are_reviewable_but_not_fabricated(self):
         # A licensed export may need redistribution notices, but the gate
         # must not claim that an absent or guessed LICENSE was approved.
