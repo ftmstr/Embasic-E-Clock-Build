@@ -160,3 +160,33 @@ Maven POM official reference: https://maven.apache.org/pom.html — `groupId`, `
 | **TOTAL** | **100** | **34.5% estimated** | **34.5** |
 
 This weighted score is a transparent **process-readiness estimate**, not a measured fraction of shipped phone/Wear functionality. The 30% handoff line means the compatibility and manifest tools exist, not that publication has occurred. A green synthetic test count does not increase the unrun Gitleaks/build/license gates.
+
+
+## Tur 8 — 20 October 2026: Private Git object completeness guard (NOT A PRIVATE SCAN)
+
+Live Public baseline: `9d27834bd5292c8a6d96e2a8ddde3d81efdf18ff`, Actions #39349746239 — **67/67 synthetic PASS**, Public history 49 commits/49 unique blobs PASS, source audit NO-GO because Public main `protected:false`, Android builds SKIPPED, APK artifact 0. GitHub Issue #2 remains OPEN.
+
+### Added security control
+
+`tools/private_audit_preflight.py` now runs `git fsck --full --no-reflogs --unreachable --no-progress` **only against an already authorized full, clean, local PRIVATE clone**. It captures this output privately and suppresses it in logs; a nonzero result or ANY unreachable/dangling object fails closed **before** the two Gitleaks scans. This closes a gap: `gitleaks git --log-opts=--all` checks reachable refs, whereas old deleted commits or unreferenced blobs can still reside in a local object database. Treat any dangling objects as a manual review problem; do not auto-delete, rewrite Private history or `git gc` merely to obtain PASS.
+
+Official Git explanation: https://git-scm.com/docs/git-fsck . The Gitleaks `git` and `dir` modes are described by its maintained upstream project: https://github.com/gitleaks/gitleaks .
+
+**Evidence limits:** The new orphan-object branch did not receive a dedicated GitHub regression test: a test-file update was blocked by tooling security safeguards and was not retried. Existing synthetic tests still run. In Public CI, this Private preflight cannot access Private sources or Gitleaks; no actual Private `git fsck`, Gitleaks scan or completed Private Git history evidence is claimed. Even an empty local fsck does not prove all remote refs, PR/issue/Actions logs or offsite history have been reviewed.
+
+### Restricted dependency metadata — concrete, narrow source context
+
+The authenticated Private version catalog specifies `androidx.room:room-runtime:2.8.5` and `com.google.android.gms:play-services-wearable:20.0.1`. Google's AndroidX release documentation confirms Room 2.8.5; Google's current Play services setup lists Wearable 20.0.1. A third-party Maven package index declares Apache-2.0 for a Room runtime 2.8.5 component, **not** for the complete resolved dependency graph. No actual Private Gradle resolution, module metadata/POM inheritance, Maven SHA verification, licenses/NOTICE/SBOM or redistribution rights assessment was performed. Sources: https://developer.android.com/jetpack/androidx/releases/room , https://developers.google.com/android/guides/setup , https://mvnrepository.com/artifact/androidx.room/room-runtime-android/2.8.5 .
+
+### Readiness scoring (unchanged estimate, not application completion)
+
+The weighted Public build/security process-readiness rubric remains **34.5%**: bootstrap/history (15/15), synthetic CI (10/10), complete Private secret/PII (0/20), admin branch protection (0/10), actual resolved licenses (0/15), source handoff preparation (4.5/15, **30% qualitative**), Android builds+device tests (0/10), evidence+private reporting (5/5). The new preflight rule provides additional defense but does not justify credit for any **unrun** audit gate. A 67-test PASS is evidence for the Public tooling only, never a phone/Wear MVP completion figure.
+
+### Required release blockers
+
+1. Administrator protects Public `main` and verifies effective merge requirements/CI/force-push/deletion/bypasses (Issue #2).
+2. Private owner executes actual complete-history + worktree Gitleaks and Git object inspection on a trustworthy local full clone, with confidential PII, issue/PR/Actions artifact and history review.
+3. Resolve Gradle plugin, compile/runtime, KSP and phone/Wear variants with artifact provenance; inspect real POM parents, license attribution, notices, trademarks, source ownership and Google Mobile Services redistribution requirements.
+4. Review isolated snapshot with exact hashes and independent approval seal. No Private ancestry/source, signing keys, proprietary assets or special reports in Public until documented approval.
+
+Current result: **source transfer NO-GO, real Android phone/Wear build NOT RUN, no APK**.
