@@ -13,6 +13,21 @@ import subprocess
 
 EXPECTED_PRIVATE = "E-Clock"
 PUBLIC_NAME = "Embasic-E-Clock-Build"
+TRUSTED_ORIGINS = frozenset((
+    "https://github.com/ftmstr/E-Clock",
+    "https://github.com/ftmstr/E-Clock.git",
+    "git@github.com:ftmstr/E-Clock",
+    "git@github.com:ftmstr/E-Clock.git",
+    "ssh://git@github.com/ftmstr/E-Clock",
+    "ssh://git@github.com/ftmstr/E-Clock.git",
+))
+
+
+def trusted_private_remote(remote: str) -> bool:
+    # Never trust a lookalike host, alternate owner, or prefix with a matching
+    # suffix. Credential-bearing HTTPS origin URLs are refused by design.
+    return remote in TRUSTED_ORIGINS
+
 
 
 class NoGo(Exception):
@@ -45,8 +60,7 @@ def scan(folder: Path, *, executable: str | None = None, invoke=None) -> dict:
         if git(folder, "branch", "--show-current") != "ci/zero-history-public-build-prep-20261017":
             raise NoGo("Use the exact dedicated Private preparation branch")
         remote = git(folder, "remote", "get-url", "origin")
-        normalized = remote.removesuffix(".git").rstrip("/")
-        if PUBLIC_NAME in normalized or not normalized.endswith("/ftmstr/" + EXPECTED_PRIVATE) and not normalized.endswith(":ftmstr/" + EXPECTED_PRIVATE):
+        if not trusted_private_remote(remote):
             raise NoGo("Remote is not the expected Private E-Clock source")
         refs = git(folder, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes", "refs/tags").splitlines()
         if not refs:
