@@ -57,6 +57,22 @@ def scan(folder: Path, *, executable: str | None = None, invoke=None) -> dict:
     except (subprocess.CalledProcessError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         raise NoGo("Private Git provenance inspection failed") from exc
 
+    # Gitleaks git --all covers reachable references only. A deleted but
+    # still stored Git object could retain sensitive Private content. Without
+    # scanning those objects, reject the entire clone for manual handling.
+    # Never echo Git fsck output: hashes and object metadata stay private.
+    try:
+        orphan_audit = subprocess.run(
+            ["git", "-C", str(folder), "fsck", "--full", "--no-reflogs",
+             "--unreachable", "--no-progress"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=120, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise NoGo("Private unreachable-object inspection NOT RUN") from exc
+    if orphan_audit.returncode != 0 or orphan_audit.stdout.strip():
+        raise NoGo("Private Git objects require manual unreachable-history review")
+
     tool = executable if executable is not None else shutil.which("gitleaks")
     if not tool:
         raise NoGo("Gitleaks executable missing; strict scan NOT RUN")
@@ -82,6 +98,7 @@ def scan(folder: Path, *, executable: str | None = None, invoke=None) -> dict:
         "gitleaks_worktree": "PASS",
         "refs_inspected": len(refs),
         "reachable_commits": count,
+        "unreachable_git_objects": "NONE DETECTED BY FSCK",
         "private_pr_issue_actions_audit": "NOT RUN",
         "historical_author_metadata_review": "NOT VERIFIED",
         "pii_review": "NOT VERIFIED",
