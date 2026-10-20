@@ -83,3 +83,14 @@ The temporary presence of an ordinary feature branch may be rejected by the stri
 Use `tools/gradle_dependency_preflight.py` only in a complete Private checkout to obtain a **draft resolved graph**. Separately, `tools/pom_license_preflight.py` accepts this Private JSON and **locally curated offline Maven POMs** to collect exact POM hashes and raw publisher license declarations. It neither downloads Private source nor approves licences. Missing/parent-inherited POM rights, SPDX alignment, third-party media, NOTICE requirements and phone/Wear redistributable bundles require explicit offline review; no actual resolved Private dependency graph has yet been produced.
 
 Before publication, review complete private Gitleaks + PII + source-rights evidence; run secret scans on the actual sanitized candidate and complete independent admin source/Audit seal. These actions remain **NOT RUN / NO-GO**, respectively.
+
+
+## Tur 6 — Metadata-only legacy exporter compatibility checker
+
+The Private legacy script's actual output has **additional inherent incompatibility**: `ROOT_FILES` requires `.github/workflows/public-snapshot-android.yml`, but `ALLOWED_SUFFIXES` does not include `.yml`. The script's own `check_name()` rejects that mandatory workflow. It also embeds invalid/duplicated shell logic. **Do not fix this by adding `.yml` to the Public source allowlist or copying the unsafe workflow.**
+
+The Private preparation-branch HEAD has 309 tracked blobs; the legacy file selection algorithm would choose 276 files, including the one forbidden workflow. This was verified from the authenticated GitHub tree *names and sizes* only. This is not a completed export or rights review.
+
+Use `tools/legacy_export_compatibility.py --local-legacy-export /trusted/private/staging` in a restricted processing environment **only on an already created review directory**. It inspects its filenames and legacy JSON audit, prints non-sensitive status codes, **does not open source-file bytes**, and exits with code 2 even when the provided claims appear approved. It will not copy or push any files. The 9 regression tests are synthetic.
+
+A future safe process must independently select and review Private source files, omit old workflow and Private READMEs/history, produce the new exact source/public SHA inventories and asset-rights evidence, verify Gitleaks + PII + transitive licences, obtain real independent review and branch protection, and set the external administrator approval seal *only then*. No such source transfer has been authorized.
