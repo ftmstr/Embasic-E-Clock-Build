@@ -16,6 +16,9 @@ import subprocess
 PUBLIC_ROOT = "9ba88a5482e30ddb3834e79dede8240af13185c3"
 SOURCE_ROOTS = ("app-phone/", "app-wear/", "core/model/", "core/alarm/", "core/data/", "core/sync/")
 SOURCE_FILES = {"settings.gradle.kts", "build.gradle.kts", "gradle.properties", "gradle/libs.versions.toml"}
+# Optional reviewed notices may be legally required for approved redistribution.
+# Never invent license grants; these files remain part of the hash-sealed review.
+LEGAL_FILES = {"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}
 REQUIRED = SOURCE_FILES | {"app-phone/build.gradle.kts", "app-wear/build.gradle.kts", "core/model/build.gradle.kts", "core/alarm/build.gradle.kts", "core/data/build.gradle.kts", "core/sync/build.gradle.kts", "app-phone/src/main/AndroidManifest.xml", "app-wear/src/main/AndroidManifest.xml"}
 INFRA_FILES = {"README.md", ".gitignore", ".github/workflows/android-ci.yml", "tools/verify_snapshot.py", "tools/test_verify_snapshot.py", "tools/legacy_export_compatibility.py", "tools/test_legacy_export_compatibility.py", "tools/check_branch_protection.py", "tools/test_branch_protection.py", "tools/audit_public_git_history.py", "tools/test_git_history_audit.py", "tools/pom_license_preflight.py", "tools/test_pom_license_preflight.py", "tools/test_ci_policy_contract.py", "tools/gradle_dependency_preflight.py", "tools/test_gradle_dependency_preflight.py", "tools/private_audit_preflight.py", "tools/test_private_audit_preflight.py", "docs/PUBLIC_SNAPSHOT_HANDOFF.md", "docs/PRIVATE_AUDIT_AND_LICENSE_GATES.md"}
 AUDIT_FILE = "SNAPSHOT-AUDIT.json"
@@ -52,7 +55,7 @@ def approval_seal(root: Path, public_digest: str) -> str:
 
 
 def source_path(path: str) -> bool:
-    if path in SOURCE_FILES:
+    if path in SOURCE_FILES | LEGAL_FILES:
         return True
     if not path.startswith(SOURCE_ROOTS):
         return False
