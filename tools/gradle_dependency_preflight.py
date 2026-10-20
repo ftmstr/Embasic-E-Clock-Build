@@ -9,19 +9,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
 
-TARGETS = (
-    (":app-phone", "debugRuntimeClasspath"),
-    (":app-wear", "debugRuntimeClasspath"),
-    (":core:model", "debugRuntimeClasspath"),
-    (":core:alarm", "debugRuntimeClasspath"),
-    (":core:data", "debugRuntimeClasspath"),
-    (":core:sync", "debugRuntimeClasspath"),
-)
+# BOTH runtime and compile trees matter to a distribution review. Plugin,
+# KSP processor, tests, BOM inheritance and variant artifacts STILL require a
+# separate verified inventory; this is not a complete licensing audit.
+MODULES = (":app-phone", ":app-wear", ":core:model", ":core:alarm",
+           ":core:data", ":core:sync")
+TARGETS = tuple((module, config) for module in MODULES
+                for config in ("debugRuntimeClasspath", "debugCompileClasspath"))
 GAV = re.compile(
     r"\b(?P<group>[A-Za-z0-9_.-]+):(?P<artifact>[A-Za-z0-9_.-]+):"
     r"(?P<version>[0-9][A-Za-z0-9+_.-]*)"
@@ -41,7 +41,7 @@ def git(root: Path, *args: str) -> str:
 
 def parse_tree(stdout: str) -> set[str]:
     if any(x in stdout for x in ("FAILED", "UNRESOLVED", "Could not resolve",
-                                 "No matching variant", "FAILURE:")):
+                                 "No matching variant", "FAILURE:", "Could not find", "No cached version", "dependency was not found")):
         raise Blocked("Unresolved Gradle component or configuration")
     coords: set[str] = set()
     for line in stdout.splitlines():
@@ -107,6 +107,9 @@ def collect(root: Path, executable: str = "gradle", runner=None) -> dict:
         "unique_external_components": len(union),
         "modules": rows,
         "all_coordinates": sorted(union),
+        "coverage_status": "INCOMPLETE: compile/runtime only; NOT plugin/KSP/test variants",
+        "plugin_classpath_and_ksp": "NOT RUN",
+        "resolved_artifact_files_and_checksums": "NOT VERIFIED",
         "maven_pom_and_parent_licenses": "NOT VERIFIED",
         "transitive_license_compliance": "NOT VERIFIED",
         "source_redistribution_rights": "NOT APPROVED",
@@ -129,8 +132,16 @@ def main():
     except Blocked as exc:
         raise SystemExit("NO-GO: " + str(exc)) from exc
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    output.chmod(0o600)
+    # O_EXCL creates a fresh private evidence file atomically. chmod after a
+    # regular write leaves a time window with the process default umask.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(output, flags, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(report, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+    except OSError as exc:
+        raise SystemExit("NO-GO: cannot create private dependency report securely") from exc
     print("Private DRAFT dependency inventory written; Maven/POM licenses remain NOT VERIFIED.")
     print(f"Modules={report['requested_configurations']}, unique coordinates={report['unique_external_components']}; no source transferred.")
 
