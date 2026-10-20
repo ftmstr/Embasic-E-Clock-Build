@@ -76,6 +76,26 @@ class PreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(p.NoGo, "not the expected Private"):
             p.scan(self.folder, executable="gitleaks", invoke=lambda *a, **kw: self.fail("scanner must not run"))
 
+    def test_private_remote_must_match_canonical_github_origin(self):
+        allowed = (
+            "https://github.com/ftmstr/E-Clock.git",
+            "git@github.com:ftmstr/E-Clock.git",
+            "ssh://git@github.com/ftmstr/E-Clock",
+        )
+        for candidate in allowed:
+            with self.subTest(origin=candidate):
+                self.assertTrue(p.trusted_private_remote(candidate))
+        forbidden = (
+            "https://github.example.invalid/ftmstr/E-Clock.git",
+            "https://github.com.evil.invalid/ftmstr/E-Clock.git",
+            "https://github.com/another-owner/E-Clock.git",
+            "https://github.com/ftmstr/Embasic-E-Clock-Build.git",
+            "file:///tmp/ftmstr/E-Clock",
+        )
+        for candidate in forbidden:
+            with self.subTest(origin=candidate):
+                self.assertFalse(p.trusted_private_remote(candidate))
+
     def test_wrong_private_branch_blocks(self):
         self.git("checkout", "-b", "other")
         with self.assertRaisesRegex(p.NoGo, "preparation branch"):
