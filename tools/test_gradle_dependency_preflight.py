@@ -62,6 +62,16 @@ class DependencyTests(unittest.TestCase):
         self.assertEqual(report["plugin_classpath_and_ksp"], "NOT RUN")
         self.assertIn("INCOMPLETE", report["coverage_status"])
 
+    def test_version_constraints_are_not_misreported_as_artifacts(self):
+        graph = (
+            "debugRuntimeClasspath\n"
+            "+--- org.example:constraint-only:1.0 (c)\n"
+            "\\--- org.example:real-artifact:2.0\n"
+        )
+        found = d.parse_tree(graph)
+        self.assertIn("org.example:real-artifact:2.0", found)
+        self.assertNotIn("org.example:constraint-only:1.0", found)
+
     def test_rejects_unresolved_report_even_exit_success(self):
         with self.assertRaisesRegex(d.Blocked, "Unresolved"):
             d.collect(self.root, "fake", self.runner([], payload="+--- fake:missing:1 FAILED"))
