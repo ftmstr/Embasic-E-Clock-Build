@@ -42,7 +42,7 @@ def git(root: Path, *args: str) -> str:
 
 def parse_tree(stdout: str) -> set[str]:
     if any(x in stdout for x in ("FAILED", "UNRESOLVED", "Could not resolve",
-                                 "No matching variant", "FAILURE:", "Could not find", "No cached version", "dependency was not found")):
+                                 "No matching variant", "FAILURE:", "Could not find", "No cached version", "dependency was not found", "(n)")):
         raise Blocked("Unresolved Gradle component or configuration")
     coords: set[str] = set()
     for line in stdout.splitlines():
