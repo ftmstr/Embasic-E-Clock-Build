@@ -46,7 +46,9 @@ def parse_tree(stdout: str) -> set[str]:
         raise Blocked("Unresolved Gradle component or configuration")
     coords: set[str] = set()
     for line in stdout.splitlines():
-        if not ("--- " in line or "(c)" in line):
+        # Gradle `(c)` nodes are version constraints, NOT resolved artifacts.
+        # Only dependency edges may contribute candidates to the draft queue.
+        if "--- " not in line or "(c)" in line:
             continue
         matches = list(GAV.finditer(line))
         if not matches:
