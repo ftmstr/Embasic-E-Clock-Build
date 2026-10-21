@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from private_audit_preflight import trusted_private_remote
 
 # BOTH runtime and compile trees matter to a distribution review. Plugin,
 # KSP processor, tests, BOM inheritance and variant artifacts STILL require a
@@ -69,8 +70,8 @@ def collect(root: Path, executable: str = "gradle", runner=None) -> dict:
             raise Blocked("Private history must be complete")
         if git(root, "branch", "--show-current") != "ci/zero-history-public-build-prep-20261017":
             raise Blocked("Wrong Private preparation branch")
-        url = git(root, "remote", "get-url", "origin").removesuffix(".git")
-        if not (url.endswith("/ftmstr/E-Clock") or url.endswith(":ftmstr/E-Clock")):
+        url = git(root, "remote", "get-url", "origin")
+        if not trusted_private_remote(url):
             raise Blocked("Wrong Private remote; never run against Public")
         if git(root, "status", "--porcelain", "--untracked-files=all"):
             raise Blocked("Dirty working tree; do not collect an unstable graph")
