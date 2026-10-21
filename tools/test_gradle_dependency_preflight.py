@@ -91,6 +91,18 @@ class DependencyTests(unittest.TestCase):
         with self.assertRaisesRegex(d.Blocked, "Wrong Private remote"):
             d.collect(self.root, "fake", self.runner([]))
 
+    def test_rejects_lookalike_private_remote_before_gradle(self):
+        impostors = (
+            "https://github.example.invalid/ftmstr/E-Clock.git",
+            "https://github.com.evil.invalid/ftmstr/E-Clock.git",
+            "https://github.com/another-team/E-Clock.git",
+        )
+        for origin in impostors:
+            with self.subTest(origin=origin):
+                self.git("remote", "set-url", "origin", origin)
+                with self.assertRaisesRegex(d.Blocked, "Wrong Private remote"):
+                    d.collect(self.root, "fake", self.runner([]))
+
     def test_rejects_dirty_private_tree(self):
         (self.root / "untracked.txt").write_text("untracked")
         with self.assertRaisesRegex(d.Blocked, "Dirty"):
