@@ -81,6 +81,13 @@ class PomTests(unittest.TestCase):
         with self.assertRaisesRegex(p.Blocked,"Duplicate"):
             p.collect(copy,self.root)
 
+    def test_invalid_nontext_coordinates_fail_closed(self):
+        for invalid in (None, 42, ["not", "a", "coordinate"]):
+            with self.subTest(kind=type(invalid).__name__):
+                draft = dict(self.draft, all_coordinates=[invalid])
+                with self.assertRaisesRegex(p.Blocked, "Duplicate or malformed"):
+                    p.collect(draft, self.root)
+
     def test_pom_with_wrong_artifact_id_cannot_supply_license_evidence(self):
         self.path.write_bytes(POM.replace(b"<artifactId>synthetic</artifactId>",
                                           b"<artifactId>unrelated</artifactId>"))
