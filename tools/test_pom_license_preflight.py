@@ -117,6 +117,12 @@ class PomTests(unittest.TestCase):
         with self.assertRaisesRegex(p.Blocked, "Symlinked Maven metadata"):
             p.collect(self.draft, self.root)
 
+    def test_linked_maven_root_is_rejected(self):
+        alias = self.root / "synthetic-root-alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaisesRegex(p.Blocked, "Symlinked Maven root"):
+            p.collect(self.draft, alias)
+
     def test_metadata_xml_must_be_project(self):
         self.path.write_bytes(b"<settings/>")
         with self.assertRaisesRegex(p.Blocked,"Not a Maven"):
