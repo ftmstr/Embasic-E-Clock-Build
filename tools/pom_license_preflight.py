@@ -100,7 +100,7 @@ def collect(draft: dict, pom_root: Path) -> dict:
     coordinates = draft.get("all_coordinates")
     if not isinstance(coordinates, list) or not coordinates or len(coordinates) > 5000:
         raise Blocked("Invalid or empty resolved component queue")
-    if len(set(coordinates)) != len(coordinates) or not all(isinstance(c, str) for c in coordinates):
+    if not all(isinstance(c, str) for c in coordinates) or len(set(coordinates)) != len(coordinates):
         raise Blocked("Duplicate or malformed resolved component coordinates")
     rows = []
     for gav in sorted(coordinates):
