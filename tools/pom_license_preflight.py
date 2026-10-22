@@ -78,6 +78,22 @@ def pom_path(cache: Path, gav: str) -> Path:
     return cache.joinpath(*group.split("."), artifact, version, f"{artifact}-{version}.pom")
 
 
+def ensure_unlinked_path(root: Path, filename: Path) -> None:
+    # Reject linked intermediate Maven directories as well as linked POMs.
+    # A missing file through a symlink must not masquerade as missing metadata.
+    if root.is_symlink():
+        raise Blocked("Symlinked Maven root")
+    try:
+        parts = filename.relative_to(root).parts
+    except ValueError as exc:
+        raise Blocked("POM path escapes Maven root") from exc
+    cursor = root
+    for component in parts:
+        cursor = cursor / component
+        if cursor.is_symlink():
+            raise Blocked("Symlinked Maven metadata path")
+
+
 def collect(draft: dict, pom_root: Path) -> dict:
     if not isinstance(draft, dict) or draft.get("public_export_authorized") is not False:
         raise Blocked("Expected a non-publishable Private Gradle draft")
@@ -89,8 +105,7 @@ def collect(draft: dict, pom_root: Path) -> dict:
     rows = []
     for gav in sorted(coordinates):
         filename = pom_path(pom_root, gav)
-        if filename.is_symlink():
-            raise Blocked("Symlink or escaping Maven metadata")
+        ensure_unlinked_path(pom_root, filename)
         if not filename.is_file():
             rows.append({"coordinate": gav, "status": "POM NOT FOUND",
                          "license_compliance": "NOT VERIFIED"})
