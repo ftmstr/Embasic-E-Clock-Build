@@ -72,6 +72,11 @@ class DependencyTests(unittest.TestCase):
         self.assertIn("org.example:real-artifact:2.0", found)
         self.assertNotIn("org.example:constraint-only:1.0", found)
 
+    def test_nonresolved_dependency_marker_cannot_enter_draft_queue(self):
+        sample = "debugRuntimeClasspath\n+--- org.example:synthetic-unit:1.0 (n)"
+        with self.assertRaisesRegex(d.Blocked, "Unresolved"):
+            d.parse_tree(sample)
+
     def test_rejects_unresolved_report_even_exit_success(self):
         with self.assertRaisesRegex(d.Blocked, "Unresolved"):
             d.collect(self.root, "fake", self.runner([], payload="+--- fake:missing:1 FAILED"))
