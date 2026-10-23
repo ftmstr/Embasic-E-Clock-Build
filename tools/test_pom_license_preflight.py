@@ -87,6 +87,21 @@ class PomTests(unittest.TestCase):
         self.assertEqual(result["records"][0]["declared_licenses"], [])
         self.assertFalse(result["artifact_redistribution_approved"])
 
+    def test_duplicate_maven_identity_fields_are_rejected(self):
+        self.path.write_bytes(POM.replace(
+            b"<artifactId>synthetic</artifactId>",
+            b"<artifactId>synthetic</artifactId><artifactId>synthetic</artifactId>"
+        ))
+        with self.assertRaisesRegex(p.Blocked, "Duplicate Maven"):
+            p.collect(self.draft, self.root)
+
+    def test_duplicate_maven_license_collections_are_rejected(self):
+        self.path.write_bytes(POM.replace(
+            b"</licenses>", b"</licenses><licenses/>"
+        ))
+        with self.assertRaisesRegex(p.Blocked, "Duplicate Maven"):
+            p.collect(self.draft, self.root)
+
     def test_invalid_xml_does_not_get_passed(self):
         self.path.write_bytes(b"<project>")
         with self.assertRaisesRegex(p.Blocked,"Invalid Maven"):
