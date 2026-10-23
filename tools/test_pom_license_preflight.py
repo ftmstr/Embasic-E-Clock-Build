@@ -63,6 +63,30 @@ class PomTests(unittest.TestCase):
         with self.assertRaisesRegex(p.Blocked,"DTD/entity"):
             p.collect(self.draft,self.root)
 
+    def test_untrusted_xml_namespace_cannot_impersonate_maven_pom(self):
+        self.path.write_bytes(
+            b'<project xmlns="https://invalid.example.test/pom">'
+            b'<groupId>org.example</groupId><artifactId>synthetic</artifactId>'
+            b'<version>1.0</version></project>'
+        )
+        with self.assertRaisesRegex(p.Blocked, "Maven project POM"):
+            p.collect(self.draft, self.root)
+
+    def test_foreign_namespace_license_claim_is_not_maven_evidence(self):
+        raw = (
+            b'<project xmlns="http://maven.apache.org/POM/4.0.0" '
+            b'xmlns:foreign="https://invalid.example.test/claims">'
+            b'<groupId>org.example</groupId><artifactId>synthetic</artifactId>'
+            b'<version>1.0</version><foreign:licenses><foreign:license>'
+            b'<foreign:name>Imposter License</foreign:name>'
+            b'</foreign:license></foreign:licenses></project>'
+        )
+        self.path.write_bytes(raw)
+        result = p.collect(self.draft, self.root)
+        self.assertEqual(result["no_direct_licenses"], 1)
+        self.assertEqual(result["records"][0]["declared_licenses"], [])
+        self.assertFalse(result["artifact_redistribution_approved"])
+
     def test_invalid_xml_does_not_get_passed(self):
         self.path.write_bytes(b"<project>")
         with self.assertRaisesRegex(p.Blocked,"Invalid Maven"):
