@@ -29,11 +29,15 @@ def parse_pom(raw: bytes, expected: str | None = None) -> dict:
         root = ET.fromstring(raw)
     except ET.ParseError as exc:
         raise Blocked("Invalid Maven POM") from exc
-    if root.tag.rsplit("}", 1)[-1] != "project":
-        raise Blocked("Not a Maven project POM")
+    # Maven POM 4.0.0 may omit the XML namespace or declare the official one.
+    # Matching by local name alone could accept foreign-namespace license claims.
+    maven_uri = "http://maven.apache.org/POM/4.0.0"
+    if root.tag not in ("project", "{" + maven_uri + "}project"):
+        raise Blocked("Not a Maven project POM or unsupported Maven namespace")
+    prefix = "{" + maven_uri + "}" if root.tag.startswith("{") else ""
     def child(e, tag):
         for c in e:
-            if c.tag.rsplit("}", 1)[-1] == tag:
+            if c.tag == prefix + tag:
                 return c
         return None
     def value(e, tag):
@@ -43,7 +47,7 @@ def parse_pom(raw: bytes, expected: str | None = None) -> dict:
     box = child(root, "licenses")
     if box is not None:
         for lic in box:
-            if lic.tag.rsplit("}", 1)[-1] != "license":
+            if lic.tag != prefix + "license":
                 continue
             licenses.append({"name": value(lic, "name")[:300],
                              "url": value(lic, "url")[:500]})
