@@ -36,10 +36,13 @@ def parse_pom(raw: bytes, expected: str | None = None) -> dict:
         raise Blocked("Not a Maven project POM or unsupported Maven namespace")
     prefix = "{" + maven_uri + "}" if root.tag.startswith("{") else ""
     def child(e, tag):
+        chosen = None
         for c in e:
             if c.tag == prefix + tag:
-                return c
-        return None
+                if chosen is not None:
+                    raise Blocked("Duplicate Maven POM metadata field")
+                chosen = c
+        return chosen
     def value(e, tag):
         c = child(e, tag) if e is not None else None
         return (c.text or "").strip() if c is not None else ""
