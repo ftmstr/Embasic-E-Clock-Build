@@ -13,6 +13,8 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
+MAX_POM_BYTES = 1024 * 1024
+
 COORD = re.compile(r"([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([0-9][A-Za-z0-9+_.-]*)\Z")
 
 
@@ -21,7 +23,7 @@ class Blocked(Exception):
 
 
 def parse_pom(raw: bytes, expected: str | None = None) -> dict:
-    if len(raw) > 1024 * 1024:
+    if len(raw) > MAX_POM_BYTES:
         raise Blocked("Oversized POM")
     if re.search(br"<!\s*(?:DOCTYPE|ENTITY)\b", raw, flags=re.I):
         raise Blocked("Unsafe XML DTD/entity in Maven POM")
@@ -119,7 +121,13 @@ def collect(draft: dict, pom_root: Path) -> dict:
             continue
         if filename.is_symlink() or not filename.resolve().is_relative_to(pom_root.resolve()):
             raise Blocked("Symlink or escaping Maven metadata")
-        raw = filename.read_bytes()
+        # Do not read an untrusted, arbitrarily large Maven cache file into
+        # memory before applying the parser's one-megabyte size limit.
+        try:
+            with filename.open("rb") as stream:
+                raw = stream.read(MAX_POM_BYTES + 1)
+        except OSError as exc:
+            raise Blocked("Maven POM metadata unreadable") from exc
         meta = parse_pom(raw, expected=gav)
         rows.append({"coordinate": gav, "status": "POM REVIEW NEEDED",
                      "pom_sha256": hashlib.sha256(raw).hexdigest(),
