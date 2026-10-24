@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 
 EXPECTED = "ftmstr/Embasic-E-Clock-Build"
 BRANCH = "main"
+REQUIRED_JOB = "Synthetic public audit contract tests"
 
 
 class PolicyBlocked(Exception):
@@ -46,8 +47,22 @@ def check(repo: str = EXPECTED, opener=urlopen, token: str = "") -> dict[str, ob
         raise PolicyBlocked("GitHub branch-policy response is not for main")
     if branch.get("protected") is not True:
         raise PolicyBlocked("Public main branch is NOT PROTECTED")
+    protection = branch.get("protection")
+    status = protection.get("required_status_checks") if isinstance(protection, dict) else None
+    if not isinstance(status, dict) or status.get("enforcement_level") not in ("non_admins", "everyone"):
+        raise PolicyBlocked("Required Public CI check policy NOT ENFORCED")
+    contexts = status.get("contexts", [])
+    checks = status.get("checks", [])
+    if not isinstance(contexts, list) or not isinstance(checks, list):
+        raise PolicyBlocked("Required Public CI check policy malformed")
+    actual = {x for x in contexts if isinstance(x, str)}
+    actual.update(x.get("context") for x in checks
+                  if isinstance(x, dict) and isinstance(x.get("context"), str))
+    if REQUIRED_JOB not in actual:
+        raise PolicyBlocked("Synthetic Public CI job is NOT REQUIRED")
     return {"repository": EXPECTED, "branch": BRANCH, "protected": True,
-            "rule_details": "NOT VERIFIED; administrator review still required"}
+            "required_ci_check": REQUIRED_JOB,
+            "rule_details": "PR reviews, bypass, force-push and deletion NOT VERIFIED; independent admin review required"}
 
 
 def main():
@@ -56,8 +71,8 @@ def main():
                        token=os.environ.get("GITHUB_TOKEN", ""))
     except PolicyBlocked as exc:
         raise SystemExit("NO-GO: " + str(exc)) from exc
-    print(f"Branch protection boolean PASS for {result['repository']}:{result['branch']}. "
-          "Required checks, bypass actors and ruleset details require independent admin review.")
+    print(f"Protected main and required synthetic CI status PASS for {result['repository']}:{result['branch']}. "
+          "Pull-request review, bypass actors, force-push/deletion and rulesets remain NOT VERIFIED.")
 
 
 if __name__ == "__main__":
