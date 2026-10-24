@@ -102,6 +102,11 @@ class PomTests(unittest.TestCase):
         with self.assertRaisesRegex(p.Blocked, "Duplicate Maven"):
             p.collect(self.draft, self.root)
 
+    def test_oversized_metadata_is_blocked_before_xml_parsing(self):
+        self.path.write_bytes(b"x" * (p.MAX_POM_BYTES + 100))
+        with self.assertRaisesRegex(p.Blocked, "Oversized POM"):
+            p.collect(self.draft, self.root)
+
     def test_invalid_xml_does_not_get_passed(self):
         self.path.write_bytes(b"<project>")
         with self.assertRaisesRegex(p.Blocked,"Invalid Maven"):
