@@ -39,9 +39,32 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(p.PolicyBlocked, "NOT PROTECTED"):
             self.read({"name": "main", "protected": False})
 
-    def test_protected_boolean_never_claims_reviewed_rules(self):
-        result=self.read({"name": "main", "protected": True})
+    def test_required_ci_check_does_not_claim_approved_reviews(self):
+        result=self.read({"name": "main", "protected": True, "protection": {
+            "required_status_checks": {"enforcement_level": "everyone",
+                                       "checks": [{"context": p.REQUIRED_JOB}]}}})
         self.assertTrue(result["protected"])
+        self.assertEqual(result["required_ci_check"], p.REQUIRED_JOB)
+        self.assertIn("NOT VERIFIED", result["rule_details"])
+
+    def test_protected_flag_without_required_ci_is_blocked(self):
+        with self.assertRaisesRegex(p.PolicyBlocked, "NOT ENFORCED"):
+            self.read({"name": "main", "protected": True})
+        with self.assertRaisesRegex(p.PolicyBlocked, "NOT ENFORCED"):
+            self.read({"name": "main", "protected": True, "protection": {
+                "required_status_checks": {"enforcement_level": "off",
+                                           "contexts": [p.REQUIRED_JOB]}}})
+
+    def test_other_required_check_cannot_substitute_for_our_ci(self):
+        with self.assertRaisesRegex(p.PolicyBlocked, "NOT REQUIRED"):
+            self.read({"name": "main", "protected": True, "protection": {
+                "required_status_checks": {"enforcement_level": "everyone",
+                                           "contexts": ["Other validation"]}}})
+
+    def test_required_context_string_is_accepted_but_review_stays_unknown(self):
+        result=self.read({"name": "main", "protected": True, "protection": {
+            "required_status_checks": {"enforcement_level": "non_admins",
+                                       "contexts": [p.REQUIRED_JOB]}}})
         self.assertIn("NOT VERIFIED", result["rule_details"])
 
     def test_wrong_branch_name_is_blocked(self):
