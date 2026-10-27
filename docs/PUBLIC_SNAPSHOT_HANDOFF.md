@@ -1,96 +1,84 @@
-# Public snapshot handoff contract — NO-GO until independent review
+# Public-only greenfield architecture and source provenance — ADR-001
 
-This is a **public-only procedure**, not permission to export Private E-Clock code. The Private repository, its PRs, history, actions artifacts, reports, media and signing credentials are never to be copied to this repository.
+**Adopted 27 October 2026 for the proposed Public-only development branch.** This document **supersedes** the former Private-to-Public snapshot handoff procedure. The previous text remains retrievable in Git history solely for audit. It is **not** an instruction or permission to export anything from `ftmstr/E-Clock`.
 
-## Verified bootstrap
+## Decision, repositories and safety boundary
 
-- Official Public destination: `ftmstr/Embasic-E-Clock-Build`.
-- Root commit: `9ba88a5482e30ddb3834e79dede8240af13185c3`.
-- Its subsequent infrastructure commits are legitimate; checking that history contains *exactly one commit* is incompatible with this repository. Instead, `tools/verify_snapshot.py` requires exactly this trusted root, full history, no additional branch/tag, known file modes and a precise reviewed manifest.
-- Never merge, mirror, rebase, cherry-pick or force-push any Private ancestry here. Do not replace the Public Git root.
+- **Sole active source of truth:** `ftmstr/Embasic-E-Clock-Build` (**PUBLIC**). All subsequent original E-Clock source, tests and engineering documents must originate in this repository on reviewed feature branches.
+- **Retired/unused:** `ftmstr/E-Clock` (**PRIVATE**). No further writes, read-based migrations, cloning, history imports, merges, cherry-picks, source/asset copying or reference to its commits for implementation. Only the owner may independently decide to delete the retired repository later. Nothing here triggers deletion.
+- **Absolute exclusions:** historical commits, private Kotlin/XML/Gradle sources, caches, credentials, keystore, identifiable user or device data, old artifacts, logos, media and reports are **not** authorized for redistribution. Existing Public tooling is not evidence that any Private scan passed.
+- **Status:** Public `main` currently contains **infrastructure only**, is not effectively branch-protected and does not yield an Android APK. Issue [#2](https://github.com/ftmstr/Embasic-E-Clock-Build/issues/2) stays **OPEN / BLOCKING**. Do not disable the security job or forge `SNAPSHOT-AUDIT.json` approval to get a green build.
 
-## Private-to-Public staging — only after private audit
+## Module structure for the first original scaffold
 
-1. In an isolated trusted **Private** checkout, verify the intended source revision, clean worktree, previous sensitive metadata, all accessible code/history/issue/action logs and source ownership. Run real Gitleaks and privacy scanning. The existing Private `scripts/prepare-public-snapshot.py` outputs a *draft only*; `--strict` is necessary but not sufficient.
-2. The legacy exporter includes `.github/workflows/public-snapshot-android.yml`, which has a malformed/duplicated shell block, requires a one-commit target, and must **not** be imported. Use the Public `.github/workflows/android-ci.yml` instead. The Private exporter's old `inventory_sha256` and `files` accounting must be recalculated against the *actual sanitized Public working tree*, not copied as proof.
-3. Copy only inspected, explicitly approved code files from `app-phone/`, `app-wear/`, `core/model/`, `core/alarm/`, `core/data/`, `core/sync/`, the four approved root Gradle paths and necessary Android manifests. Source/ABI contracts remain unchanged. Do not carry source commit metadata, tags, branch history, `docs/` from Private, assets without known redistribution rights, APK, ZIP, JAR, keystore, logs, user/device data or media from Drive.
-4. Independently verify Maven/Gradle direct and transitive dependencies, source and APK redistribution notices, font/logo/audio rights, and Play Services/Wear OS terms. No `LICENSE` or legal approval is to be fabricated. Repeat secret scan on **final effective Public candidate**.
-5. Before publication, record a Private audit with evidence IDs and precise source + asset digests in the Private Google Drive project folder. Do not place private report content, reviewer identities, email addresses or private scanner logs in Public.
-6. After authorized clean source files are committed to Public through **new Public commits only**, compute the following draft manifest from their exact tracked bytes. `source_files` is the lexically sorted list of tracked files excluding `INFRA_FILES` and `SNAPSHOT-AUDIT.json`; `source_inventory_sha256` is SHA256 of a trailing-newline-terminated sorted list of `<file SHA256>  <path>` for source files. `public_inventory_sha256` uses the same algorithm on *all tracked files except `SNAPSHOT-AUDIT.json`*, including public workflows, tests and README. The audit file itself is excluded to prevent self-referential hashing. Fill `reviewed_asset_sha256` with an exact path-to-SHA mapping; an empty mapping is valid only when there are zero assets.
-7. Treat `SNAPSHOT-AUDIT.json` claims as **assertions, not proof**. Set its fields to `PASS/VERIFIED/APPROVED` only after actual audit and authorized legal/human approval. The repository administrator must **separately** set the repository **Actions variable** `ECLOCK_APPROVED_PUBLIC_SHA256` equal to the **approval seal** calculated as SHA256 of `public_inventory_sha256 + newline + SHA256(SNAPSHOT-AUDIT.json exact bytes) + newline` *after* independent inspection. This also seals the claimed audit/rights statuses against later alteration. This variable is intentionally unset today. Reset it whenever any public file or the audit claims change, even a workflow edit.
-8. With repo branch protection, administrator review and repository-variable access restrictions enforced independently, GitHub Actions can then attempt the core/phone/wear debug build. A green build does not demonstrate device timing, paired signatures, STOP/SNOOZE transport, Doze, Direct Boot or DST reliability.
-
-## Required manifest format — illustration ONLY, not an approved record
-
-```json
-{
-  "automated_secret_scan": "NOT RUN",
-  "private_history_audit": "NOT VERIFIED",
-  "source_rights_approved": "NOT APPROVED",
-  "artifact_redistribution_approved": "NOT APPROVED",
-  "public_approval": "NOT APPROVED",
-  "source_files": [],
-  "source_inventory_sha256": "",
-  "public_inventory_sha256": "",
-  "reviewed_asset_sha256": {}
-}
+```text
+settings.gradle.kts
+build.gradle.kts
+gradle/libs.versions.toml
+gradle.properties
+app-phone/             Android application, Compose Material 3, navigation and notifications
+app-wear/              Wear OS application, Compose for Wear OS, rotary/haptics
+core/model/            shared Kotlin domain types + schemaVersion and contracts
+core/alarm/            AlarmManager planning, local recurrence, ringing session orchestration
+core/data/             Room tables/migrations, repositories, DataStore preferences
+core/sync/             Data Layer envelope validation, reconciliation, idempotency
 ```
 
-Do **not** commit this illustrative JSON as an approval and do not set the Actions variable without independent evidence.
+Native Kotlin, Coroutines/Flow, Room, DataStore, exact alarm-clock APIs and Wearable Data Layer. No separate hosted backend. Architecture is **local-first**: each phone/watch device stores and pre-schedules eligible alarms, continues during link loss and reconciles when reconnected.
 
-## Administrator-controlled seal derivation (only after actual approval)
+## Domain model and storage contract (design before implementation)
 
-From the exact audited Public working tree, compute the seal locally:
+| Model | Key fields / rules |
+|---|---|
+| `AlarmDefinition` | `id: UUID`, local hour/minute, label, enabled, repeat weekdays and optional one-shot date, zone/DST occurrence policy, sound, vibration, snooze enabled/minutes/count, ring target `PHONE/WATCH/BOTH`, optional `groupId` |
+| `AlarmGroup` | `id: UUID`, label, explicit permanent enable state and distinct temporary-skip rule; per-alarm enabled flags not silently rewritten when a group is skipped |
+| `RecordMetadata` | `schemaVersion`, `revision` (monotonic Lamport-style), `updatedAt` (observability only), `originDeviceId`, `isTombstone`; never resurrect a deleted UUID from stale state |
+| `AlarmOccurrence` | occurrence UUID derived or persisted with definition UUID, due epoch, target and local scheduling version; calculate next occurrence with `java.time` and explicit timezone policy |
+| `RingSession` | `ringInstanceId: UUID`, alarm ID, scheduled occurrence key, local target/device, state, snooze attempt and current due time; never treat this as the same object as the alarm definition |
+| `WorldClockEntry` | local user entry UUID, city label and IANA `ZoneId`; maximum 20 entries, offline time calculation |
+| `StopwatchSession` / `TimerSession` | stable IDs; stopwatch monotonic elapsedRealtime anchors; timers persisted wall-clock deadlines with boot/rebase handling; future-proof for multiple parallel timers |
 
-```python
-import hashlib
-from pathlib import Path
-audit_hash = hashlib.sha256(Path("SNAPSHOT-AUDIT.json").read_bytes()).hexdigest()
-tree_hash = "<reviewed public_inventory_sha256 from audited file>"
-seal = hashlib.sha256((tree_hash + "\n" + audit_hash + "\n").encode()).hexdigest()
-print(seal)
+Room migrations must be versioned and tested. Store per-device local preferences separately from globally synchronized preferences.
+
+## Wearable Data Layer protocol (planned schema v1)
+
+- `DataClient`: versioned durable alarm/group records, tombstones and reconciliation snapshots/deltas. Never require a live message to ensure a device's scheduled alarm exists.
+- `MessageClient`: best-effort immediate `RING_STARTED`, `STOP`, `SNOOZE` actions. Envelope fields: `schemaVersion`, message ID, `ringInstanceId`, alarm UUID, origin device ID, action, occurrence identity and bounded timestamps/arguments.
+- `NodeClient`/`CapabilityClient`: peer discovery and capability negotiation, **not** transport of large persistent state.
+- Validate size, version, enum values, IDs, tombstone structure and stale message/session mismatch; reject malformed or replayed envelopes without crashing.
+- Deterministic tie-breaking for concurrent alarm-definition edits: compare increasing `revision` first, then permanent tombstone priority at equal revision, then lexicographic `originDeviceId`. `updatedAt` is informational only because wall clocks may differ. A tombstoned UUID is not implicitly reused; deliberate recreation allocates a new UUID. Persist applied message IDs and reconcile after link restoration.
+- Any future tombstone garbage-collection strategy must prove acknowledgement or bound risk of offline reappearance; default is retention until independently tested.
+
+## Ring state machine and durability (planned)
+
+```text
+ENABLED/PLANNED --local AlarmManager trigger--> RINGING
+RINGING --local STOP--> DISMISSED
+RINGING --SNOOZE (budget available)--> SNOOZED --next local trigger--> RINGING
+RINGING --timeout/rule--> DISMISSED
+RINGING/SNOOZED --reboot/process recovery--> reconcile persisted session + next due
 ```
 
-The repository variable `ECLOCK_APPROVED_PUBLIC_SHA256` is the seal, **not** the raw tree digest. Do not set it based solely on repository claims. The approver must inspect the private evidence before setting it, and must enforce branch protection separately.
+STOP and SNOOZE on a paired device coordinate only a **matching** `ringInstanceId` and occurrence. STOP must never cancel an unrelated later alarm. Each device performs its own local ring/schedule decision, and a configured cross-device STOP/SNOOZE is applied idempotently upon receipt. Prioritize locked-screen alarm usability and correct notification/permission handling.
 
-## Validation commands
+## Architecture decisions and implementation order
 
-```bash
-python3 -m unittest discover -s tools -p 'test_*.py' -v
-ECLOCK_APPROVED_PUBLIC_SHA256= python3 tools/verify_snapshot.py
-```
+- **ADR-001 (this document):** Public-only greenfield code, former Private inactive, zero reuse/import.
+- **ADR-002:** independently scheduled phone/watch alarms; sync cannot be a prerequisite for the trigger.
+- **ADR-003:** revision-based deterministic reconciliation with durable tombstones, idempotent messages and UUID ring sessions.
+- **ADR-004:** exact alarm and full-screen notification behavior follow currently applicable **official** Android/Wear OS APIs, permissions and Play policy, independently verified before implementation; never claim a required permission based on guesswork.
+- **ADR-005:** security release gates apply to **the new original Public source** and its actual artifacts. Legacy Private-history approval fields do **not** automatically become `VERIFIED`; redesign `tools/verify_snapshot.py` and CI via a reviewed PR for true greenfield provenance, required tests, dependency and third-party rights checks, without relaxing source/secret/PII protections.
 
-The second command must exit nonzero while source audit evidence is missing.
+Vertical sequence: **architecture/ADR → reproducible Gradle scaffold → local alarm CRUD/planning → ringing STOP/SNOOZE → groups → Data Layer sync → Wear OS UX → world clocks → stopwatch/laps → timer(s) → settings → data migrations and paired-device reliability**.
 
-## Operational limitations
+## Definition of each merge/build gate
 
-- A regex/path scan and file hash are not a complete secret audit or IP review.
-- Branch history rooting and admin-managed variable approval require actual GitHub branch protection, secret hygiene and independent human review; in-repository checks alone cannot replace repository permissions.
-- CI emits no APK artifacts before the source-audit job succeeds.
-- Separate GitHub-hosted debug builds may be signed with different ephemeral debug certificates. They are **not** a validated phone/watch Data Layer pair. Paired device tests must use matching developer-controlled **non-production** test signing in a trusted environment.
+1. Work only in a **Public feature branch** and reviewed PR. Repository owner must enable effective main protection, mandatory relevant CI check, PR review, force-push/deletion blocking and narrow bypass rules; verify actual GitHub readback.
+2. Inspect each **new original source** and its commit contents for secrets/PII/unsafe files and third-party ownership; use a clean tracked-file manifest and an independent reviewer-managed SHA approval appropriate for this greenfield project. No fabricated approval and no Private clone dependency.
+3. Resolve the **actual** Gradle plugin, runtime, compile, test and KSP/release dependencies; verify licenses, notices and binary hashes; capture exact CI evidence. Synthetic audit PASS is not Gradle build PASS.
+4. Only when the source and CI gates genuinely pass, execute Android core/phone/Wear lint, unit tests and assembleDebug. Then evaluate real phone + watch offline/paired/reboot/Doze/DST/snooze/STOP acceptance tests. Never publish APK artifacts with unreviewed source or keystore.
+5. Report `PASS`, `FAIL`, `NOT RUN`, `SKIPPED` separately, and do not label the project MVP complete without tested major features.
 
+### Transition note
 
-## Tur 5: Mandatory live GitHub branch-policy gate
-
-On 19 October 2026, GitHub REST `GET /repos/ftmstr/Embasic-E-Clock-Build/branches/main` returned **`protected: false`**. The active rulesets list was empty. Detailed branch-protection settings returned 403 to the connected integration. The source-release gate now calls `tools/check_branch_protection.py` before the snapshot verifier and rejects `protected != true` or API errors. **This repo is NO-GO for source publication until the administrator protects `main` and separately verifies the exact enforcement policy.**
-
-Set the rule in GitHub Settings → Branches or Rules → Rulesets. Require a pull request with review, disallow deletion/force-push and constrain bypass actors. The read-only **Synthetic public audit contract tests** job is designed to run on PRs. The source-audit/Android jobs do not run on PRs; they remain reserved for reviewed code on `main`. A genuine PR CI run has **NOT RUN** yet. Do not require the intentionally failing source-audit job as an immediate merge prerequisite before an approved snapshot exists. Revisit required checks once release approval is possible.
-
-The temporary presence of an ordinary feature branch may be rejected by the strict single-public-branch source-audit check; clean up completed review branches before any release. Never delete or rewrite the trusted Public root to resolve this.
-
-## Restricted POM evidence queue
-
-Use `tools/gradle_dependency_preflight.py` only in a complete Private checkout to obtain a **draft resolved graph**. Separately, `tools/pom_license_preflight.py` accepts this Private JSON and **locally curated offline Maven POMs** to collect exact POM hashes and raw publisher license declarations. It neither downloads Private source nor approves licences. Missing/parent-inherited POM rights, SPDX alignment, third-party media, NOTICE requirements and phone/Wear redistributable bundles require explicit offline review; no actual resolved Private dependency graph has yet been produced.
-
-Before publication, review complete private Gitleaks + PII + source-rights evidence; run secret scans on the actual sanitized candidate and complete independent admin source/Audit seal. These actions remain **NOT RUN / NO-GO**, respectively.
-
-
-## Tur 6 — Metadata-only legacy exporter compatibility checker
-
-The Private legacy script's actual output has **additional inherent incompatibility**: `ROOT_FILES` requires `.github/workflows/public-snapshot-android.yml`, but `ALLOWED_SUFFIXES` does not include `.yml`. The script's own `check_name()` rejects that mandatory workflow. It also embeds invalid/duplicated shell logic. **Do not fix this by adding `.yml` to the Public source allowlist or copying the unsafe workflow.**
-
-The Private preparation-branch HEAD has 309 tracked blobs; the legacy file selection algorithm would choose 276 files, including the one forbidden workflow. This was verified from the authenticated GitHub tree *names and sizes* only. This is not a completed export or rights review.
-
-Use `tools/legacy_export_compatibility.py --local-legacy-export /trusted/private/staging` in a restricted processing environment **only on an already created review directory**. It inspects its filenames and legacy JSON audit, prints non-sensitive status codes, **does not open source-file bytes**, and exits with code 2 even when the provided claims appear approved. It will not copy or push any files. The 9 regression tests are synthetic.
-
-A future safe process must independently select and review Private source files, omit old workflow and Private READMEs/history, produce the new exact source/public SHA inventories and asset-rights evidence, verify Gitleaks + PII + transitive licences, obtain real independent review and branch protection, and set the external administrator approval seal *only then*. No such source transfer has been authorized.
+Older docs and scripts may still mention **Private-to-Public export**, including `tools/private_audit_preflight.py`, `tools/legacy_export_compatibility.py` and Private-history claims in `tools/verify_snapshot.py`. These remain **disabled as an active development strategy**. They will be retired/refactored only through reviewed Public changes with regression tests, preserving fail-closed source and license controls. Deleting the Private repo is expressly outside this workflow.
