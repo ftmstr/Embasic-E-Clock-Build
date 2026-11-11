@@ -46,7 +46,9 @@ class RunnerEvidenceTests(unittest.TestCase):
         self.assertIn("$verified -ne 0", script)
         self.assertIn("$e.product_build_result -ne 'NOT_VERIFIED'", script)
         self.assertIn('-ForegroundColor', script)
-        self.assertIn("$e.run_binding -ne 'VERIFIED_JOB_RUN_ID'", script)
+        self.assertIn("$e.run_binding -eq 'NO_JOB_EVIDENCE'", script)
+        self.assertIn("$e.job_count -ne 0", script)
+        self.assertIn("NOT ASSESSED (no jobs observed)", script)
         self.assertIn('RUN ID MATCH', script)
 
     def test_cross_run_success_job_fails_closed(self):
@@ -76,6 +78,31 @@ class RunnerEvidenceTests(unittest.TestCase):
         self.assertEqual(out['run_binding'], 'VERIFIED_JOB_RUN_ID')
         self.assertEqual([j['classification'] for j in out['jobs']],
                          ['NO_STEP_EVIDENCE', 'SKIPPED'])
+        self.assertEqual(out['product_build_result'], 'NOT_VERIFIED')
+
+    def test_queued_run_without_jobs_is_not_identity_verified(self):
+        out = diagnose({'id': 43095684765, 'status': 'queued', 'conclusion': None},
+                       {'jobs': []})
+        self.assertEqual(out['run_status'], 'queued')
+        self.assertEqual(out['job_count'], 0)
+        self.assertEqual(out['run_binding'], 'NO_JOB_EVIDENCE')
+        self.assertEqual(out['product_build_result'], 'NOT_VERIFIED')
+        self.assertEqual(out['phone']['verified_ci_gates'], 0)
+        self.assertEqual(out['wear']['verified_ci_gates'], 0)
+
+    def test_completed_run_without_jobs_is_not_identity_verified(self):
+        out = diagnose({'id': 73, 'status': 'completed', 'conclusion': 'failure'},
+                       {'jobs': []}, 'HTTP 404 BlobNotFound')
+        self.assertEqual(out['run_binding'], 'NO_JOB_EVIDENCE')
+        self.assertEqual(out['root_cause'], 'UNDETERMINED')
+        self.assertEqual(out['log_evidence'], 'UNAVAILABLE_BLOB_NOT_FOUND')
+
+    def test_nonempty_matching_jobs_remain_verified(self):
+        out = diagnose({'id': 74, 'status': 'in_progress'},
+                       {'jobs': [{'run_id': 74, 'name': 'setup', 'steps': [], 'conclusion': None}]})
+        self.assertEqual(out['run_binding'], 'VERIFIED_JOB_RUN_ID')
+        self.assertEqual(out['job_count'], 1)
+        self.assertEqual(out['run_status'], 'in_progress')
         self.assertEqual(out['product_build_result'], 'NOT_VERIFIED')
 
     def test_input_schema_rejected(self):

@@ -42,7 +42,10 @@ def diagnose(run, jobs, log_error=''):
         if not isinstance(job, dict) or type(job.get('run_id')) is not int or job['run_id'] != run_id:
             raise ValueError('job run_id missing or different from workflow run ID')
     found = [classify_job(job) for job in jobs['jobs']]
-    return {'run_id': run_id, 'run_binding': 'VERIFIED_JOB_RUN_ID',
+    # No jobs means no identity pairs exist to verify (vacuous truth is not evidence).
+    binding = 'VERIFIED_JOB_RUN_ID' if found else 'NO_JOB_EVIDENCE'
+    return {'run_id': run_id, 'run_binding': binding,
+            'run_status': run.get('status', 'unknown'),
             'run_conclusion': run.get('conclusion', 'unknown'),
             'head_sha': run.get('head_sha'), 'jobs': found,
             'job_count': len(found),
