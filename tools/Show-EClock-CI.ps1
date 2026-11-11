@@ -18,6 +18,20 @@ if ($e.run_binding -eq 'VERIFIED_JOB_RUN_ID') {
     if ([int]$e.job_count -le 0 -or $e.jobs.Count -le 0) {
         throw 'Cannot verify job/run identity with no observed jobs.'
     }
+    $seenJobIds = @{}
+    foreach ($job in $e.jobs) {
+        $idText = [string]$job.job_id
+        if ($idText -cnotmatch '^[1-9][0-9]*$') {
+            throw 'Missing or invalid job ID in diagnostic evidence.'
+        }
+        if ($seenJobIds.ContainsKey($idText)) {
+            throw 'Duplicate job ID in diagnostic evidence.'
+        }
+        $seenJobIds[$idText] = $true
+    }
+    if ($seenJobIds.Count -ne [int]$e.job_count) {
+        throw 'Job identity count does not match the reported job count.'
+    }
 } elseif ($e.run_binding -eq 'NO_JOB_EVIDENCE') {
     if ([int]$e.job_count -ne 0 -or $e.jobs.Count -ne 0) {
         throw 'No-job identity classification conflicts with supplied job records.'
@@ -45,10 +59,11 @@ if ($e.run_binding -eq 'NO_JOB_EVIDENCE') {
     Write-Host ' RUN ID MATCH: NOT ASSESSED (no jobs observed)' -ForegroundColor Yellow
 } else {
     Write-Host ' RUN ID MATCH: VERIFIED (observed jobs bound to this run)' -ForegroundColor Green
+    Write-Host (' Job ID AUDIT: {0} unique job ID(s)' -f $e.job_count) -ForegroundColor Cyan
 }
 foreach ($job in $e.jobs) {
     $color = if ($job.classification -eq 'NO_STEP_EVIDENCE') { 'Yellow' } elseif ($job.classification -eq 'SKIPPED') { 'DarkGray' } else { 'Cyan' }
-    Write-Host (' {0}: {1} ({2} steps)' -f $job.name, $job.classification, $job.observed_steps) -ForegroundColor $color
+    Write-Host (' #{0} {1}: {2} ({3} steps)' -f $job.job_id, $job.name, $job.classification, $job.observed_steps) -ForegroundColor $color
 }
 Write-Host (' Log evidence: {0}' -f $e.log_evidence) -ForegroundColor Yellow
 Write-Host ' Kok neden: BELIRLENMEDI | Android derleme PASS: DOGRULANMADI' -ForegroundColor Red

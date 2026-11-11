@@ -24,7 +24,7 @@ def classify_job(job):
         status = 'STEPS_OBSERVED_NOT_BUILD_PROOF'
     else:
         status = 'INCONCLUSIVE'
-    return {'name': str(job.get('name') or '(unnamed)'),
+    return {'job_id': job.get('id'), 'name': str(job.get('name') or '(unnamed)'),
             'conclusion': conclusion if isinstance(conclusion, str) else 'unknown',
             'classification': status, 'observed_steps': len(steps) if isinstance(steps, list) else 0}
 
@@ -38,9 +38,16 @@ def diagnose(run, jobs, log_error=''):
     run_id = run.get('id')
     if type(run_id) is not int or run_id <= 0:
         raise ValueError('workflow run ID must be a positive integer')
+    seen_job_ids = set()
     for job in jobs['jobs']:
         if not isinstance(job, dict) or type(job.get('run_id')) is not int or job['run_id'] != run_id:
             raise ValueError('job run_id missing or different from workflow run ID')
+        job_id = job.get('id')
+        if type(job_id) is not int or job_id <= 0:
+            raise ValueError('job id must be a positive integer')
+        if job_id in seen_job_ids:
+            raise ValueError('duplicate job id in workflow run evidence')
+        seen_job_ids.add(job_id)
     found = [classify_job(job) for job in jobs['jobs']]
     # No jobs means no identity pairs exist to verify (vacuous truth is not evidence).
     binding = 'VERIFIED_JOB_RUN_ID' if found else 'NO_JOB_EVIDENCE'
