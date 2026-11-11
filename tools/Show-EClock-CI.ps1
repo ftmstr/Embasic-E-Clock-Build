@@ -14,6 +14,9 @@ if (-not (Test-Path -LiteralPath $EvidencePath -PathType Leaf)) {
     throw 'Evidence JSON does not exist.'
 }
 $e = Get-Content -LiteralPath $EvidencePath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($e.run_binding -ne 'VERIFIED_JOB_RUN_ID') {
+    throw 'Job/run identity evidence missing or inconsistent. Refusing mixed-run dashboard.'
+}
 if ($e.product_build_result -ne 'NOT_VERIFIED' -or $e.root_cause -ne 'UNDETERMINED') {
     throw 'Unexpected diagnostic contract. Refusing to render unsupported PASS.'
 }
@@ -29,6 +32,7 @@ Write-Host ''
 Write-Host ' EMBASIC E-CLOCK | CI KANIT PANOSU ' -BackgroundColor DarkBlue -ForegroundColor White
 Write-Host (' Run: {0}   Sonuc: {1}' -f $e.run_id, $e.run_conclusion) -ForegroundColor Yellow
 Write-Host (' HEAD: {0}' -f $e.head_sha) -ForegroundColor DarkGray
+Write-Host ' RUN ID MATCH: VERIFIED (all jobs bound to this run)' -ForegroundColor Green
 foreach ($job in $e.jobs) {
     $color = if ($job.classification -eq 'NO_STEP_EVIDENCE') { 'Yellow' } elseif ($job.classification -eq 'SKIPPED') { 'DarkGray' } else { 'Cyan' }
     Write-Host (' {0}: {1} ({2} steps)' -f $job.name, $job.classification, $job.observed_steps) -ForegroundColor $color

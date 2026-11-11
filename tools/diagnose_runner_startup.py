@@ -32,8 +32,18 @@ def classify_job(job):
 def diagnose(run, jobs, log_error=''):
     if not isinstance(run, dict) or not isinstance(jobs, dict) or not isinstance(jobs.get('jobs'), list):
         raise ValueError('run must be an object and jobs must contain a jobs array')
+    # A job list from another workflow run could silently contaminate evidence.
+    # GitHub's jobs API includes run_id for each job. Reject missing or mismatched
+    # bindings rather than interpreting unrelated jobs as evidence for this run.
+    run_id = run.get('id')
+    if type(run_id) is not int or run_id <= 0:
+        raise ValueError('workflow run ID must be a positive integer')
+    for job in jobs['jobs']:
+        if not isinstance(job, dict) or type(job.get('run_id')) is not int or job['run_id'] != run_id:
+            raise ValueError('job run_id missing or different from workflow run ID')
     found = [classify_job(job) for job in jobs['jobs']]
-    return {'run_id': run.get('id'), 'run_conclusion': run.get('conclusion', 'unknown'),
+    return {'run_id': run_id, 'run_binding': 'VERIFIED_JOB_RUN_ID',
+            'run_conclusion': run.get('conclusion', 'unknown'),
             'head_sha': run.get('head_sha'), 'jobs': found,
             'job_count': len(found),
             'log_evidence': 'UNAVAILABLE_BLOB_NOT_FOUND' if 'BlobNotFound' in log_error else 'NOT_ASSESSED',
