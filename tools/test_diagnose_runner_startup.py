@@ -53,6 +53,9 @@ class RunnerEvidenceTests(unittest.TestCase):
         self.assertIn('Job ID AUDIT', script)
         self.assertIn('Duplicate job ID', script)
         self.assertIn('$job.job_id', script)
+        self.assertIn('JOB_FAILURE_WITHOUT_FAILED_STEP', script)
+        self.assertIn('no failing step', script)
+        self.assertIn('$job.failed_steps', script)
 
     def test_cross_run_success_job_fails_closed(self):
         with self.assertRaisesRegex(ValueError, 'run_id'):
@@ -140,6 +143,40 @@ class RunnerEvidenceTests(unittest.TestCase):
         self.assertEqual(out['job_count'], 0)
         self.assertEqual(out['phone']['verified_ci_gates'], 0)
         self.assertEqual(out['wear']['verified_ci_gates'], 0)
+
+    def test_failure_with_only_successful_steps_is_not_step_failure(self):
+        item = classify_job({'conclusion': 'failure', 'steps': [
+            {'name': 'checkout', 'conclusion': 'success'},
+            {'name': 'cleanup', 'conclusion': 'skipped'}]})
+        self.assertEqual(item['classification'], 'JOB_FAILURE_WITHOUT_FAILED_STEP')
+        self.assertEqual(item['observed_steps'], 2)
+        self.assertEqual(item['failed_steps'], 0)
+
+    def test_failure_with_only_pending_steps_is_not_step_failure(self):
+        item = classify_job({'conclusion': 'failure', 'steps': [{'name': 'pending', 'conclusion': None}]})
+        self.assertEqual(item['classification'], 'JOB_FAILURE_WITHOUT_FAILED_STEP')
+
+    def test_failed_steps_are_counted_explicitly(self):
+        item = classify_job({'conclusion': 'failure', 'steps': [
+            {'name': 'a', 'conclusion': 'failure'}, {'name': 'b', 'conclusion': 'success'},
+            {'name': 'c', 'conclusion': 'failure'}]})
+        self.assertEqual(item['classification'], 'STEP_EVIDENCE_FAILURE')
+        self.assertEqual(item['failed_steps'], 2)
+
+    def test_malformed_step_evidence_is_rejected(self):
+        for steps in ('bad', {}, 42, [None], [{'name': 'valid'}, 'bad']):
+            with self.subTest(steps=steps), self.assertRaisesRegex(ValueError, 'malformed job steps'):
+                classify_job({'conclusion': 'failure', 'steps': steps})
+
+    def test_step_failure_unknown_does_not_upgrade_phone_or_wear(self):
+        result = diagnose({'id': 200, 'status': 'completed', 'conclusion': 'failure'},
+                          {'jobs': [{'id': 991, 'run_id': 200, 'name': 'probe',
+                                     'conclusion': 'failure',
+                                     'steps': [{'name': 'setup', 'conclusion': 'success'}]}]})
+        self.assertEqual(result['jobs'][0]['classification'], 'JOB_FAILURE_WITHOUT_FAILED_STEP')
+        self.assertEqual(result['product_build_result'], 'NOT_VERIFIED')
+        self.assertEqual(result['phone']['verified_ci_gates'], 0)
+        self.assertEqual(result['wear']['verified_ci_gates'], 0)
 
     def test_input_schema_rejected(self):
         with self.assertRaises(ValueError):

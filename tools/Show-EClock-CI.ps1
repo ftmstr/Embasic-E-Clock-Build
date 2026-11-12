@@ -62,8 +62,11 @@ if ($e.run_binding -eq 'NO_JOB_EVIDENCE') {
     Write-Host (' Job ID AUDIT: {0} unique job ID(s)' -f $e.job_count) -ForegroundColor Cyan
 }
 foreach ($job in $e.jobs) {
-    $color = if ($job.classification -eq 'NO_STEP_EVIDENCE') { 'Yellow' } elseif ($job.classification -eq 'SKIPPED') { 'DarkGray' } else { 'Cyan' }
-    Write-Host (' #{0} {1}: {2} ({3} steps)' -f $job.job_id, $job.name, $job.classification, $job.observed_steps) -ForegroundColor $color
+    $color = if ($job.classification -eq 'NO_STEP_EVIDENCE' -or $job.classification -eq 'JOB_FAILURE_WITHOUT_FAILED_STEP') { 'Yellow' } elseif ($job.classification -eq 'SKIPPED') { 'DarkGray' } else { 'Cyan' }
+    Write-Host (' #{0} {1}: {2} ({3} steps, {4} failed)' -f $job.job_id, $job.name, $job.classification, $job.observed_steps, $job.failed_steps) -ForegroundColor $color
+    if ($job.classification -eq 'JOB_FAILURE_WITHOUT_FAILED_STEP') {
+        Write-Host ' WARNING: no failing step in supplied job record; root cause unverified.' -ForegroundColor Yellow
+    }
 }
 Write-Host (' Log evidence: {0}' -f $e.log_evidence) -ForegroundColor Yellow
 Write-Host ' Kok neden: BELIRLENMEDI | Android derleme PASS: DOGRULANMADI' -ForegroundColor Red

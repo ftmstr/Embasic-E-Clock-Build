@@ -14,19 +14,25 @@ def classify_job(job):
         raise ValueError('job must be an object')
     conclusion = job.get('conclusion')
     steps = job.get('steps')
+    # A job failure and a nonempty step list do not prove any step failed.
+    if steps is not None and (not isinstance(steps, list) or
+                              any(not isinstance(step, dict) for step in steps)):
+        raise ValueError('malformed job steps evidence')
+    failed_steps = sum(step.get('conclusion') == 'failure' for step in (steps or []))
     if conclusion == 'skipped':
         status = 'SKIPPED'
-    elif not isinstance(steps, list) or not steps:
+    elif not steps:
         status = 'NO_STEP_EVIDENCE'
     elif conclusion == 'failure':
-        status = 'STEP_EVIDENCE_FAILURE'
+        status = 'STEP_EVIDENCE_FAILURE' if failed_steps else 'JOB_FAILURE_WITHOUT_FAILED_STEP'
     elif conclusion == 'success':
         status = 'STEPS_OBSERVED_NOT_BUILD_PROOF'
     else:
         status = 'INCONCLUSIVE'
     return {'job_id': job.get('id'), 'name': str(job.get('name') or '(unnamed)'),
             'conclusion': conclusion if isinstance(conclusion, str) else 'unknown',
-            'classification': status, 'observed_steps': len(steps) if isinstance(steps, list) else 0}
+            'classification': status, 'observed_steps': len(steps) if isinstance(steps, list) else 0,
+            'failed_steps': failed_steps}
 
 
 def diagnose(run, jobs, log_error=''):
